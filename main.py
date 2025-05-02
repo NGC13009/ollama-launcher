@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import ttk, filedialog, messagebox, scrolledtext # Added scrolledtext
+from tkinter import ttk, filedialog, messagebox, scrolledtext
 import subprocess
 import json
 import os
@@ -9,6 +9,7 @@ import time
 import queue                                                  # Added queue for thread-safe communication
 import pystray
 from PIL import Image
+import re
 
 HAS_PYSTRAY = True
 
@@ -38,6 +39,157 @@ DEFAULT_SETTINGS = {
     }
 }
 
+
+class AnsiColorText(scrolledtext.ScrolledText):
+    """
+    A ScrolledText widget that interprets ANSI color codes.
+    Sets default background to #1e1e1e.
+    """
+    def __init__(self, master=None, **kwargs):
+        # Set default background and foreground for dark theme
+        default_bg = '#1e1e1e'
+        default_fg = '#d4d4d4' # Light gray for good contrast on dark bg
+
+        kwargs.setdefault('background', default_bg)
+        kwargs.setdefault('foreground', default_fg)
+        kwargs.setdefault('insertbackground', 'white') # Cursor color
+        # Ensure state is handled correctly - start disabled
+        kwargs.setdefault('state', tk.DISABLED)
+
+        super().__init__(master, **kwargs)
+
+        # Regex to find ANSI escape sequences
+        self.ansi_escape_pattern = re.compile(r'\x1b\[([\d;]*)m')
+
+        # --- Basic ANSI SGR code to Tkinter tag mapping ---
+        self.tag_configs = {
+            # Reset
+            '0': {'foreground': default_fg, 'background': default_bg, 'font': self._get_font_config()},
+
+            # Styles
+            '1': {'font': self._get_font_config(bold=True)},  # Bold
+            '4': {'underline': True},                         # Underline
+            '22': {'font': self._get_font_config(bold=False)},# Normal intensity (undo bold)
+            '24': {'underline': False},                       # Not underlined
+
+            # Foreground colors (30-37)
+            '30': {'foreground': '#2e3436'},  # Black (use dark gray)
+            '31': {'foreground': '#cc0000'},  # Red
+            '32': {'foreground': '#4e9a06'},  # Green
+            '33': {'foreground': '#c4a000'},  # Yellow
+            '34': {'foreground': '#3465a4'},  # Blue
+            '35': {'foreground': '#75507b'},  # Magenta
+            '36': {'foreground': '#06989a'},  # Cyan
+            '37': {'foreground': '#d3d7cf'},  # White (use light gray)
+            '39': {'foreground': default_fg}, # Default foreground
+
+            # Background colors (40-47)
+            '40': {'background': '#2e3436'},  # Black background
+            '41': {'background': '#cc0000'},  # Red background
+            '42': {'background': '#4e9a06'},  # Green background
+            '43': {'background': '#c4a000'},  # Yellow background
+            '44': {'background': '#3465a4'},  # Blue background
+            '45': {'background': '#75507b'},  # Magenta background
+            '46': {'background': '#06989a'},  # Cyan background
+            '47': {'background': '#d3d7cf'},  # White background
+            '49': {'background': default_bg}  # Default background
+        }
+
+        # --- Configure tags ---
+        for code, config in self.tag_configs.items():
+            tag_name = f"ansi_{code}"
+            self.tag_configure(tag_name, **config)
+
+        # Keep track of currently active SGR codes for applying tags
+        self.active_codes = {'0'} # Start with reset state
+
+    def _get_font_config(self, bold=False, italic=False):
+        """Gets a font configuration tuple based on the widget's default font."""
+        font_str = str(self.cget('font'))
+        try:
+            font_parts = font_str.split()
+            family = font_parts[0] if font_parts else "TkDefaultFont"
+            size = int(font_parts[1]) if len(font_parts) > 1 else 10
+            weight = "bold" if bold else "normal"
+            slant = "italic" if italic else "roman"
+            # Ensure underline is not part of the font tuple directly
+            return (family, size, weight, slant)
+        except Exception:
+            return ("TkDefaultFont", 10, "bold" if bold else "normal", "italic" if italic else "roman")
+
+    def write_ansi(self, text):
+        """
+        Inserts text containing ANSI escape codes, applying colors/styles.
+        Manages widget state (NORMAL/DISABLED) and scrolling.
+        """
+        current_state = self.cget('state')
+        self.config(state=tk.NORMAL) # Enable writing
+
+        # Split text by ANSI codes, keeping the codes as delimiters
+        parts = self.ansi_escape_pattern.split(text)
+
+        for i, part in enumerate(parts):
+            if not part: # Skip empty parts
+                continue
+
+            if i % 2 == 0:
+                # This is plain text
+                # Determine tags based on active codes, excluding '0' unless it's the only one
+                current_tags = tuple(f"ansi_{code}" for code in self.active_codes if code != '0')
+                # Use default tag 'ansi_0' if no specific codes are active
+                tags_to_apply = current_tags if current_tags else ('ansi_0',)
+                self.insert(tk.END, part, tags_to_apply)
+            else:
+                # This is an ANSI code sequence (the part inside \x1b[...m)
+                if not part: # Handle case like \x1b[m (reset)
+                     codes = ['0']
+                else:
+                    codes = part.split(';')
+
+                # Process codes within the sequence
+                needs_reset = False
+                new_codes_in_sequence = set()
+
+                for code in codes:
+                    if not code: continue # Skip empty codes from ;;
+                    code = code.lstrip('0')
+                    if not code: code = '0' # Treat '0' or '00' as '0'
+
+                    if code == '0':
+                        needs_reset = True
+                        break # Reset overrides others in this sequence
+
+                    if code in self.tag_configs:
+                        new_codes_in_sequence.add(code)
+
+                # Apply changes to active_codes
+                if needs_reset:
+                    self.active_codes = {'0'}
+                else:
+                    # Remove conflicting codes before adding new ones
+                    temp_active = set(self.active_codes)
+                    for new_code in new_codes_in_sequence:
+                        if '30' <= new_code <= '37' or new_code == '39': # Foreground
+                            temp_active = {c for c in temp_active if not ('30' <= c <= '37' or c == '39')}
+                        elif '40' <= new_code <= '47' or new_code == '49': # Background
+                            temp_active = {c for c in temp_active if not ('40' <= c <= '47' or c == '49')}
+                        elif new_code == '22': # Normal intensity cancels bold
+                            temp_active.discard('1')
+                        elif new_code == '24': # Not underlined cancels underline
+                            temp_active.discard('4')
+                    # Add the new codes
+                    temp_active.update(new_codes_in_sequence)
+                    # Ensure '0' is removed if any other code is active
+                    if len(temp_active) > 1:
+                         temp_active.discard('0')
+                    elif not temp_active: # If all codes cancelled out, reset
+                         temp_active = {'0'}
+
+                    self.active_codes = temp_active
+
+
+        self.see(tk.END) # Scroll to the end
+        self.config(state=current_state) # Restore original state (usually DISABLED)
 
 class OllamaGUI:
 
@@ -118,9 +270,8 @@ class OllamaGUI:
         log_frame.columnconfigure(0, weight=1)
         log_frame.rowconfigure(0, weight=1) # Make log area itself resizable
 
-        self.log_widget = scrolledtext.ScrolledText(log_frame, wrap=tk.WORD, height=15, width=80) # Adjust size
+        self.log_widget = AnsiColorText(log_frame, wrap=tk.WORD, height=15, width=80) # Adjust size
         self.log_widget.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
-        self.log_widget.config(state=tk.DISABLED)                                                 # Make read-only initially
 
         # --- Buttons ---
         button_frame = ttk.Frame(main_frame, padding="5")
@@ -300,17 +451,14 @@ class OllamaGUI:
             self.status_var.set("Status: Error saving settings.")
 
     def clear_log(self):
-        """Clears the log text widget."""
         self.log_widget.config(state=tk.NORMAL)
         self.log_widget.delete('1.0', tk.END)
-        self.log_widget.config(state=tk.DISABLED)
+        self.log_widget.active_codes = {'0'}
+        self.log_widget.config(state=tk.DISABLED) # Explicitly set back to DISABLED
 
+    # 3. Update update_log method
     def update_log(self, message):
-        """Appends a message to the log widget, thread-safe via queue."""
-        self.log_widget.config(state=tk.NORMAL)
-        self.log_widget.insert(tk.END, message)
-        self.log_widget.see(tk.END) # Auto-scroll
-        self.log_widget.config(state=tk.DISABLED)
+        self.log_widget.write_ansi(message)
 
     def process_log_queue(self):
         """Checks the queue for log messages and updates the widget."""
@@ -475,7 +623,7 @@ class OllamaGUI:
             if self.is_running:
                 if messagebox.askyesno("Exit Confirmation", "Ollama is running. Do you want to stop it and exit?"):
                     self.stop_ollama()
-                    time.sleep(0.1)
+                    time.sleep(1)
                     self.root.destroy()
             else:
                 if messagebox.askyesno("Exit Confirmation", "Are you sure you want to exit?"):
@@ -485,12 +633,5 @@ class OllamaGUI:
 if __name__ == "__main__":
     root = tk.Tk()
     app = OllamaGUI(root)
-    # Optional: Add back application menu if desired
-    # menubar = tk.Menu(root)
-    # app_menu = tk.Menu(menubar, tearoff=0)
-    # # Add commands here if needed (e.g., maybe show/hide parts of UI?)
-    # app_menu.add_command(label="Exit", command=app.on_closing)
-    # menubar.add_cascade(label="Application", menu=app_menu)
-    # root.config(menu=menubar)
-
     root.mainloop()
+    print('ok')
