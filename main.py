@@ -13,7 +13,7 @@ import re
 import webbrowser
 from help_text import HELP_TEXT, VERSION, DATE
 
-HAS_PYSTRAY = True
+has_pystray = True
 
 # 配置文件路径
 CONFIG_FILE = "ollama_launcher_config.json"
@@ -81,6 +81,16 @@ class AnsiColorText(tk.Text):
             '36': {'foreground': '#06989a'},  # Cyan
             '37': {'foreground': '#d3d7cf'},  # White (use light gray)
             '39': {'foreground': default_fg}, # Default foreground
+
+            # --- 添加亮色前景 (90-97) ---
+            '90': {'foreground': '#555753'},  # Bright Black (darker gray)
+            '91': {'foreground': '#ef2929'},  # Bright Red
+            '92': {'foreground': '#8ae234'},  # Bright Green
+            '93': {'foreground': '#fce94f'},  # Bright Yellow
+            '94': {'foreground': '#729fcf'},  # Bright Blue
+            '95': {'foreground': '#ad7fa8'},  # Bright Magenta
+            '96': {'foreground': '#34e2e2'},  # Bright Cyan
+            '97': {'foreground': '#eeeeec'},  # Bright White
 
             # Background colors (40-47)
             '40': {'background': '#2e3436'},  # Black background
@@ -194,6 +204,7 @@ class AnsiColorText(tk.Text):
 class OllamaLauncherGUI:
 
     def __init__(self, root):
+        global has_pystray
         self.root = root
         self.root.title("Ollama Launcher")
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
@@ -289,10 +300,10 @@ class OllamaLauncherGUI:
             text="Start minimized to tray on next launch directly.",
             variable=self.start_minimized_var)
         self.start_minimized_check.grid(row=row_num, column=0, columnspan=2, sticky=tk.W, padx=5, pady=(5, 5))
-                                                                     # Disable if tray icon is not available
-        if not HAS_PYSTRAY:
+
+        # Disable if tray icon is not available
+        if not has_pystray:
             self.start_minimized_check.config(state=tk.DISABLED)
-                                                                     # Removed the separate options_frame
 
         # --- Log Area ---
         log_frame = ttk.LabelFrame(main_frame, text="Ollama Log Output", padding="5")
@@ -342,9 +353,9 @@ class OllamaLauncherGUI:
         # --- Menu Bar ---
         menubar = tk.Menu(root)
         app_menu = tk.Menu(menubar, tearoff=0)
-        if HAS_PYSTRAY:
+        if has_pystray:
             app_menu.add_command(label="Hide to Tray", command=self.hide_window)
-        app_menu.add_command(label="Exit", command=self.quit_application) # Use the quit function
+        app_menu.add_command(label="Exit", command=self.on_closing) # Use the quit function
         app_menu.add_command(label="help", command=self.help)
         app_menu.add_command(label="about", command=self.about)
         menubar.add_cascade(label="Application", menu=app_menu)
@@ -352,7 +363,7 @@ class OllamaLauncherGUI:
 
         # --- Check for Start Minimized (Keep this at the end of __init__) ---
         # Use after() to allow the window to initialize before hiding
-        if HAS_PYSTRAY and self.start_minimized_var.get():
+        if has_pystray and self.start_minimized_var.get():
             # Delay slightly to ensure window and tray are ready
             self.root.after(50, self.hide_window)
 
@@ -391,14 +402,10 @@ class OllamaLauncherGUI:
         about_window.resizable(False, False)
         about_window.iconbitmap('favicon.ico')
 
-        # 设置背景色
         bg_color = "#efefef"
         fg_color = "#1e1e1e"
-
-        # 设置窗口背景色
         about_window.configure(bg=bg_color)
 
-        # 使用 ttk.Style 统一 ttk 控件样式
         style = ttk.Style()
         style.configure("About.TFrame", background=bg_color)
         style.configure("About.TLabel", background=bg_color, foreground=fg_color)
@@ -408,14 +415,7 @@ class OllamaLauncherGUI:
         container = ttk.Frame(about_window, style="About.TFrame")
         container.pack(expand=True, fill="both")
 
-        info_text = f"""
-Ollama Launcher
-
-version: {VERSION}
-update: {DATE}
-license: GPLv3
-- NGC13009 -
-"""
+        info_text = f"""Ollama Launcher\n\nversion: {VERSION}\nupdate: {DATE}\nlicense: GPLv3\n- NGC13009 -"""
 
         label = tk.Label(container, text=info_text, justify="center", bg=bg_color, fg=fg_color)
         label.pack(pady=10)
@@ -433,19 +433,22 @@ license: GPLv3
 
     def setup_tray_icon(self):
         """Sets up the system tray icon and menu."""
+        global has_pystray
         try:
             # Load the icon image - MUST exist in the script's directory
             icon_path = os.path.join(SCRIPT_DIR, "favicon.ico")
             image = Image.open(icon_path)
         except FileNotFoundError:
             messagebox.showerror("Error", "Icon file 'favicon.ico' not found in script directory. Tray icon disabled.")
+            self.app_err("Icon file 'favicon.ico' not found in script directory. Tray icon disabled.")
             print("Error: favicon.ico not found. Cannot create tray icon.")
-            HAS_PYSTRAY = False
+            has_pystray = False
             return
         except Exception as e:
             messagebox.showerror("Error", f"Failed to load favicon.ico: {e}. Tray icon disabled.")
+            self.app_err(f"Failed to load favicon.ico: {e}. Tray icon disabled.")
             print(f"Error loading icon: {e}")
-            HAS_PYSTRAY = False
+            has_pystray = False
             return
 
         # Define menu items (text, callback function)
@@ -453,20 +456,20 @@ license: GPLv3
         menu = pystray.Menu(
             pystray.MenuItem(
                 'Show Launcher',
-                lambda: self.root.after(0, self.show_window),     # Schedule show_window
-                default=True                                      # Default action on left-click
+                lambda: self.root.after(0, self.show_window), # Schedule show_window
+                default=True                                  # Default action on left-click
             ),
             pystray.MenuItem(
                 'Start Ollama',
-                lambda: self.root.after(0, self.start_ollama)     # Schedule start_ollama
+                lambda: self.root.after(0, self.start_ollama) # Schedule start_ollama
             ),
             pystray.MenuItem(
                 'Stop Ollama',
-                lambda: self.root.after(0, self.stop_ollama)      # Schedule stop_ollama
+                lambda: self.root.after(0, self.stop_ollama)  # Schedule stop_ollama
             ),
             pystray.MenuItem(
                 'Exit',
-                lambda: self.root.after(0, self.quit_application) # Schedule quit_application
+                lambda: self.root.after(0, self.on_closing)   # Schedule on_closing()
             ))
 
         # Create the icon object
@@ -504,25 +507,6 @@ license: GPLv3
         if path:
             self.vars[key].set(path)
 
-    def quit_application(self):
-        """Stops everything and exits the application cleanly."""
-        print("Quit requested.")
-        # Stop the tray icon first (signals its thread to stop)
-        if self.tray_icon:
-            self.tray_icon.stop()
-            print("Tray icon stopped.")
-
-        # Stop Ollama if it's running
-        if self.is_running:
-            print("Stopping Ollama process...")
-            self.stop_ollama() # Call the existing stop function
-                               # Give it a moment to process stop messages if needed
-            time.sleep(0.2)
-
-        print("Destroying Tkinter root window.")
-        # Destroy the Tkinter window (ends mainloop)
-        self.root.destroy()
-
     def load_settings(self):
         try:
             if os.path.exists(CONFIG_PATH):
@@ -538,6 +522,7 @@ license: GPLv3
                 self.status_var.set("Status: config.json not found. Using default settings.")
         except Exception as e:
             messagebox.showerror("Error", f"Failed to load settings: {e}")
+            self.app_err(f"Failed to load settings: {e}")
             self.settings = DEFAULT_SETTINGS.copy()
             self.status_var.set("Status: Error loading settings. Using defaults.")
 
@@ -565,7 +550,7 @@ license: GPLv3
         self.start_minimized_var.set(bool(start_min_value))
 
         # Ensure checkbox state reflects tray availability
-        if not HAS_PYSTRAY:
+        if not has_pystray:
             self.start_minimized_var.set(False)
             if hasattr(self, 'start_minimized_check'): # Check if widget exists yet
                 self.start_minimized_check.config(state=tk.DISABLED)
@@ -581,9 +566,10 @@ license: GPLv3
                 json.dump(current_settings, f, indent=4)
             self.settings = current_settings
             self.status_var.set("Status: Settings saved to config.json")
-            self.update_log("--- Settings saved successfully. ---\n")
+            self.app_info("Settings saved successfully.")
         except Exception as e:
             messagebox.showerror("Error", f"Failed to save settings: {e}")
+            self.app_err(f"Failed to save settings: {e}")
             self.status_var.set("Status: Error saving settings.")
 
     def clear_log(self):
@@ -597,23 +583,23 @@ license: GPLv3
 
         try:
             self.root.clipboard_append(log_content)
-            self.update_log("--- copy log to clipboard. ---\n")
+            self.app_info("copy log to clipboard.")
 
         except tk.TclError as e:
-            messagebox.showerror("Error", f"复制到剪贴板时出错: {e}")
+            messagebox.showerror("Error", f"Error when copy LOG to clipboard: {e}")
+            self.app_err(f"Error when copy LOG to clipboard: {e}")
 
-    # 3. Update update_log method
     def update_log(self, message):
         self.log_widget.write_ansi(message)
 
     def app_info(self, message):
-        self.log_widget.write_ansi('[app info]\t' + message + '\n')
+        self.log_widget.write_ansi('\x1b[92m[app info]\x1b[0m\t' + message + '\n')
 
     def app_warn(self, message):
-        self.log_widget.write_ansi('\033[93m[app warn]\033[0m\t' + message + '\n')
+        self.log_widget.write_ansi('\x1b[93m[app warn]\x1b[0m\t' + message + '\n')
 
     def app_err(self, message):
-        self.log_widget.write_ansi('\033[91m[app warn]\033[0m\t' + message + '\n')
+        self.log_widget.write_ansi('\x1b[91m[app warn]\x1b[0m\t' + message + '\n')
 
     def process_log_queue(self):
         """Checks the queue for log messages and updates the widget."""
@@ -635,19 +621,21 @@ license: GPLv3
                 self.log_queue.put(line) # Put raw line in queue
         except Exception as e:
                                          # Log errors from the reader thread itself (optional)
-            self.log_queue.put(f"--- Error reading {pipe_name}: {e} ---\n")
+            self.app_err(f"Error reading {pipe_name}: {e}")
         finally:
             pipe.close()                 # Ensure pipe is closed when reading stops
-            self.log_queue.put(f"--- {pipe_name} stream closed ---\n")
+            self.app_err(f"{pipe_name} stream closed")
 
     def start_ollama(self):
         if self.is_running:
             messagebox.showwarning("Info", "Ollama is already running.")
+            self.app_warn("Ollama is already running.")
             return
 
         ollama_path = self.vars['ollama_exe_path'].get()
         if not ollama_path or not os.path.exists(ollama_path):
             messagebox.showerror("Error", f"Ollama executable not found at: {ollama_path}\nPlease set the correct path and save settings.")
+            self.app_err(f"Ollama executable not found at: {ollama_path}\nPlease set the correct path and save settings.")
             self.status_var.set("Status: Error - Ollama path invalid.")
             return
 
@@ -662,8 +650,8 @@ license: GPLv3
 
         try:
             self.status_var.set("Status: Starting Ollama...")
-            self.update_log("---                        ---\n")
-            self.update_log("--- Starting Ollama Server ---\n")
+            self.update_log("\n\n")
+            self.app_info("Starting Ollama Server")
             self.root.update_idletasks()
 
             # --- CRITICAL CHANGES for redirecting output ---
@@ -698,8 +686,8 @@ license: GPLv3
 
         except Exception as e:
             messagebox.showerror("Error", f"Failed to start Ollama: {e}")
+            self.app_err(f"Failed to start Ollama: {e}")
             self.status_var.set(f"Status: Error starting Ollama - {e}")
-            self.update_log(f"--- Failed to start Ollama: {e} ---\n")
             self.is_running = False
             self.ollama_process = None
             self.start_button.config(state=tk.NORMAL) # Re-enable start button on failure
@@ -717,7 +705,7 @@ license: GPLv3
                             # self.ollama_process is likely None or invalid now, don't rely on it
             status_message = f"Status: Ollama server stopped (Exit Code: {exit_code})."
             self.status_var.set(status_message)
-            self.log_queue.put(f"--- Ollama Process Exited (Code: {exit_code}) ---\n")
+            self.app_info(f"Ollama Process Exited (Code: {exit_code})")
             self.start_button.config(state=tk.NORMAL)
             self.stop_button.config(state=tk.DISABLED)
                             # Threads reading pipes should exit automatically as pipes close
@@ -732,7 +720,7 @@ license: GPLv3
             return
 
         self.status_var.set("Status: Stopping Ollama...")
-        self.update_log("--- Sending stop signal to Ollama ---\n")
+        self.app_info("Sending stop signal to Ollama")
         self.root.update_idletasks()
 
         try:
@@ -742,7 +730,7 @@ license: GPLv3
                 try:
                     self.ollama_process.wait(timeout=3)     # Wait up to 3 seconds
                 except subprocess.TimeoutExpired:
-                    self.update_log("--- Ollama did not terminate gracefully, killing... ---\n")
+                    self.app_info("Ollama did not terminate gracefully, killing...")
                     if self.ollama_process.poll() is None:  # Check again before kill
                         self.ollama_process.kill()
                         self.ollama_process.wait(timeout=2) # Wait for kill confirmation
@@ -753,14 +741,15 @@ license: GPLv3
             self.ollama_process = None # Clear process object
             status_msg = f"Status: Ollama server stopped (Exit Code: {exit_code})." if exit_code is not None else "Status: Ollama stopped (Exit code unknown)."
             self.status_var.set(status_msg)
-            self.log_queue.put(f"--- Ollama Process Stopped (Final Code: {exit_code}) ---\n")
+            self.app_info(f"Ollama Process Stopped (Final Code: {exit_code})")
             self.start_button.config(state=tk.NORMAL)
             self.stop_button.config(state=tk.DISABLED)
 
         except Exception as e:
             messagebox.showerror("Error", f"Error stopping Ollama: {e}")
+            self.app_err(f"Error stopping Ollama: {e}")
             self.status_var.set(f"Status: Error stopping Ollama - {e}")
-            self.update_log(f"--- Error stopping Ollama: {e} ---\n")
+            self.app_info(f"Error stopping Ollama: {e}")
             # Attempt to reset state even on error
             self.is_running = False
             self.ollama_process = None
@@ -770,16 +759,21 @@ license: GPLv3
     # hide_window method removed as requested by replacing button
 
     def on_closing(self):
+
+        if self.tray_icon:
+            self.tray_icon.stop()
+            print("Tray icon stopped.")
+
         if self.is_running:
-            self.update_log("--- save config... ---\n")
+            self.app_info("save config...")
             self.save_settings()
-            self.update_log("--- stop ollama.exe... ---\n")
+            self.app_info("stop ollama.exe...")
             self.stop_ollama()
             time.sleep(1)
-            self.update_log("--- stop ollama.exe ok ---\n")
+            self.app_info("stop ollama.exe ok")
             self.root.destroy()
         else:
-            self.update_log("--- save config... ---\n")
+            self.app_info("save config...")
             self.save_settings()
             self.root.destroy()
 
