@@ -29,7 +29,7 @@ int main(int argc, char *argv[])
     }
 
     int count = 0;
-
+    printf("[test] very long line, long long long long long long long long long long long long long long long long long long long long long long long long long long long long long long long long long long long long long long long long long long long long long long long long \n");
     while (1)
     {
         // 显示点什么出去...

@@ -6,20 +6,21 @@ import os
 import sys
 import threading
 import time
-import queue                                                  # Added queue for thread-safe communication
+import queue
 import pystray
 from PIL import Image
 import re
+import webbrowser
+from help_text import HELP_TEXT, VERSION, DATE
 
 HAS_PYSTRAY = True
 
-# --- Configuration ---
+# 配置文件路径
 CONFIG_FILE = "ollama_launcher_config.json"
 SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
 CONFIG_PATH = os.path.join(SCRIPT_DIR, CONFIG_FILE)
 
-# --- Default Settings ---
-# (Defaults remain the same as before)
+# 默认配置
 DEFAULT_SETTINGS = {
     "ollama_exe_path": "C:/application/ollama/OLLAMA_FILE/ollama.exe",
     "variables": {
@@ -36,24 +37,21 @@ DEFAULT_SETTINGS = {
         "OLLAMA_ORIGINS": "*",
         "OLLAMA_TMPDIR": "E:/LLM/ollama_models/temp",
         "OLLAMA_USE_MLOCK": "1",
-    }
+    },
+    "start_minimized": False
 }
 
 
-class AnsiColorText(scrolledtext.ScrolledText):
-    """
-    A ScrolledText widget that interprets ANSI color codes.
-    Sets default background to #1e1e1e.
-    """
+# 彩色打印以支持ANSI着色
+class AnsiColorText(tk.Text):
+
     def __init__(self, master=None, **kwargs):
-        # Set default background and foreground for dark theme
         default_bg = '#1e1e1e'
-        default_fg = '#d4d4d4' # Light gray for good contrast on dark bg
+        default_fg = '#efefef'
 
         kwargs.setdefault('background', default_bg)
         kwargs.setdefault('foreground', default_fg)
-        kwargs.setdefault('insertbackground', 'white') # Cursor color
-        # Ensure state is handled correctly - start disabled
+        kwargs.setdefault('insertbackground', 'white')
         kwargs.setdefault('state', tk.DISABLED)
 
         super().__init__(master, **kwargs)
@@ -62,6 +60,7 @@ class AnsiColorText(scrolledtext.ScrolledText):
         self.ansi_escape_pattern = re.compile(r'\x1b\[([\d;]*)m')
 
         # --- Basic ANSI SGR code to Tkinter tag mapping ---
+        # yapf: disable
         self.tag_configs = {
             # Reset
             '0': {'foreground': default_fg, 'background': default_bg, 'font': self._get_font_config()},
@@ -94,6 +93,7 @@ class AnsiColorText(scrolledtext.ScrolledText):
             '47': {'background': '#d3d7cf'},  # White background
             '49': {'background': default_bg}  # Default background
         }
+        # yapf: enable
 
         # --- Configure tags ---
         for code, config in self.tag_configs.items():
@@ -137,12 +137,12 @@ class AnsiColorText(scrolledtext.ScrolledText):
                 # Determine tags based on active codes, excluding '0' unless it's the only one
                 current_tags = tuple(f"ansi_{code}" for code in self.active_codes if code != '0')
                 # Use default tag 'ansi_0' if no specific codes are active
-                tags_to_apply = current_tags if current_tags else ('ansi_0',)
+                tags_to_apply = current_tags if current_tags else ('ansi_0', )
                 self.insert(tk.END, part, tags_to_apply)
             else:
                 # This is an ANSI code sequence (the part inside \x1b[...m)
                 if not part: # Handle case like \x1b[m (reset)
-                     codes = ['0']
+                    codes = ['0']
                 else:
                     codes = part.split(';')
 
@@ -151,7 +151,7 @@ class AnsiColorText(scrolledtext.ScrolledText):
                 new_codes_in_sequence = set()
 
                 for code in codes:
-                    if not code: continue # Skip empty codes from ;;
+                    if not code: continue   # Skip empty codes from ;;
                     code = code.lstrip('0')
                     if not code: code = '0' # Treat '0' or '00' as '0'
 
@@ -169,34 +169,44 @@ class AnsiColorText(scrolledtext.ScrolledText):
                     # Remove conflicting codes before adding new ones
                     temp_active = set(self.active_codes)
                     for new_code in new_codes_in_sequence:
-                        if '30' <= new_code <= '37' or new_code == '39': # Foreground
+                        if '30' <= new_code <= '37' or new_code == '39':   # Foreground
                             temp_active = {c for c in temp_active if not ('30' <= c <= '37' or c == '39')}
                         elif '40' <= new_code <= '47' or new_code == '49': # Background
                             temp_active = {c for c in temp_active if not ('40' <= c <= '47' or c == '49')}
-                        elif new_code == '22': # Normal intensity cancels bold
+                        elif new_code == '22':                             # Normal intensity cancels bold
                             temp_active.discard('1')
-                        elif new_code == '24': # Not underlined cancels underline
+                        elif new_code == '24':                             # Not underlined cancels underline
                             temp_active.discard('4')
-                    # Add the new codes
+                                                                           # Add the new codes
                     temp_active.update(new_codes_in_sequence)
-                    # Ensure '0' is removed if any other code is active
+                                                                           # Ensure '0' is removed if any other code is active
                     if len(temp_active) > 1:
-                         temp_active.discard('0')
-                    elif not temp_active: # If all codes cancelled out, reset
-                         temp_active = {'0'}
+                        temp_active.discard('0')
+                    elif not temp_active:                                  # If all codes cancelled out, reset
+                        temp_active = {'0'}
 
                     self.active_codes = temp_active
 
-
-        self.see(tk.END) # Scroll to the end
+        self.see(tk.END)                 # Scroll to the end
         self.config(state=current_state) # Restore original state (usually DISABLED)
 
-class OllamaGUI:
+
+class OllamaLauncherGUI:
 
     def __init__(self, root):
         self.root = root
         self.root.title("Ollama Launcher")
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
+        self.root.minsize(400, 850)
+        self.root.geometry("400x850")
+        icon_path = os.path.join(SCRIPT_DIR, "favicon.ico")
+        if os.path.exists(icon_path):
+            try:
+                self.root.iconbitmap(icon_path)
+            except tk.TclError as e:
+                print(f"Warning: Could not load icon '{icon_path}'. Error: {e}")
+        else:
+            print(f"Warning: Icon file '{icon_path}' not found.")
 
         self.settings = DEFAULT_SETTINGS.copy()
         self.vars = {}
@@ -208,6 +218,8 @@ class OllamaGUI:
         self.is_running = False
         # Queue for log messages from threads
         self.log_queue = queue.Queue()
+        # Initialize the variable for the checkbox here
+        self.start_minimized_var = tk.BooleanVar()
 
         # 图标
         self.tray_icon = None    # Placeholder for the tray icon object
@@ -239,17 +251,22 @@ class OllamaGUI:
         ttk.Entry(path_frame, textvariable=self.vars['ollama_exe_path'], width=60).grid(row=0, column=1, sticky=(tk.W, tk.E), padx=5)
         ttk.Button(path_frame, text="Browse...", command=self.browse_ollama_exe).grid(row=0, column=2, padx=5)
 
-        # --- Environment Variables ---
-        env_frame = ttk.LabelFrame(main_frame, text="Environment Variables", padding="5")
+        # --- Environment Variables & Options Frame ---
+        env_frame = ttk.LabelFrame(main_frame, text="Environment Variables & Options", padding="5")
         env_frame.grid(row=1, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=5)
         env_frame.columnconfigure(1, weight=1) # Make entry column expandable
 
-        # (Variable creation loop remains the same as before)
+        # --- Environment Variable Creation Loop ---
         row_num = 0
         for key, default_value in DEFAULT_SETTINGS["variables"].items():
             ttk.Label(env_frame, text=f"{key}:").grid(row=row_num, column=0, sticky=tk.W, padx=5, pady=2)
             if key in ["OLLAMA_ENABLE_CUDA", "OLLAMA_FLASH_ATTENTION", "OLLAMA_USE_MLOCK"]:
-                self.vars[key] = tk.IntVar(value=int(default_value))
+                # Use default_value directly for IntVar initialization
+                try:
+                    init_val = int(default_value)
+                except (ValueError, TypeError):
+                    init_val = 0 # Default to 0 if conversion fails
+                self.vars[key] = tk.IntVar(value=init_val)
                 ttk.Checkbutton(env_frame, variable=self.vars[key]).grid(row=row_num, column=1, sticky=tk.W, padx=5, pady=2)
             elif key in ["OLLAMA_MODELS", "OLLAMA_TMPDIR"]:
                 self.vars[key] = tk.StringVar(value=default_value)
@@ -263,55 +280,156 @@ class OllamaGUI:
                 ttk.Entry(env_frame, textvariable=self.vars[key], width=50).grid(row=row_num, column=1, columnspan=2, sticky=(tk.W, tk.E), padx=5, pady=2)
             row_num += 1
 
+        # --- Add Separator and Minimized Checkbox INSIDE env_frame ---
+        ttk.Separator(env_frame, orient='horizontal').grid(row=row_num, column=0, columnspan=3, sticky='ew', pady=5) # Span 3 to cover button column too
+        row_num += 1
+
+        self.start_minimized_check = ttk.Checkbutton(
+            env_frame,                                               # Parent is env_frame
+            text="Start minimized to tray on next launch directly.",
+            variable=self.start_minimized_var)
+        self.start_minimized_check.grid(row=row_num, column=0, columnspan=2, sticky=tk.W, padx=5, pady=(5, 5))
+                                                                     # Disable if tray icon is not available
+        if not HAS_PYSTRAY:
+            self.start_minimized_check.config(state=tk.DISABLED)
+                                                                     # Removed the separate options_frame
+
         # --- Log Area ---
         log_frame = ttk.LabelFrame(main_frame, text="Ollama Log Output", padding="5")
         # Span across 2 columns, adjust row as needed
         log_frame.grid(row=2, column=0, columnspan=2, sticky=(tk.W, tk.E, tk.N, tk.S), pady=5)
         log_frame.columnconfigure(0, weight=1)
-        log_frame.rowconfigure(0, weight=1) # Make log area itself resizable
-
-        self.log_widget = AnsiColorText(log_frame, wrap=tk.WORD, height=15, width=80) # Adjust size
+        log_frame.rowconfigure(0, weight=1)
+        self.log_widget = AnsiColorText(log_frame, wrap=tk.NONE)
         self.log_widget.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        h_scrollbar = ttk.Scrollbar(log_frame, orient=tk.HORIZONTAL, command=self.log_widget.xview)
+        h_scrollbar.grid(row=1, column=0, sticky=(tk.W, tk.E))
+        self.log_widget.configure(xscrollcommand=h_scrollbar.set)
+        v_scrollbar = ttk.Scrollbar(log_frame, orient=tk.VERTICAL, command=self.log_widget.yview)
+        v_scrollbar.grid(row=0, column=1, sticky=(tk.N, tk.S))
+        self.log_widget.configure(yscrollcommand=v_scrollbar.set)
+        log_frame.columnconfigure(1, weight=0)
 
         # --- Buttons ---
         button_frame = ttk.Frame(main_frame, padding="5")
-        # Place below log area now
-        button_frame.grid(row=3, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=10)
-        button_frame.columnconfigure((0, 1, 2, 3), weight=1)
+        button_frame.grid(row=3, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=10) # Correct row index
+        button_frame.columnconfigure((0, 1, 2, 3, 4), weight=1)                        # Ensure weights cover all 5 buttons
 
         self.save_button = ttk.Button(button_frame, text="Save Settings", command=self.save_settings)
-        self.save_button.grid(row=0, column=0, padx=5, sticky=tk.E)
+        self.save_button.grid(row=0, column=0, padx=5, sticky=tk.E) # Use sticky E/W to distribute space
 
         self.start_button = ttk.Button(button_frame, text="Start Ollama", command=self.start_ollama)
-        self.start_button.grid(row=0, column=1, padx=5, sticky=tk.W)
+        self.start_button.grid(row=0, column=1, padx=5, sticky='ew') # Use ew for button stretching
 
         self.stop_button = ttk.Button(button_frame, text="Stop Ollama", command=self.stop_ollama, state=tk.DISABLED)
-        self.stop_button.grid(row=0, column=2, padx=5, sticky=tk.W)
+        self.stop_button.grid(row=0, column=2, padx=5, sticky='ew') # Use ew
 
-        # Optional: Keep Hide button or replace with Clear Log? Let's add Clear Log.
-        self.clear_log_button = ttk.Button(button_frame, text="Clear Log", command=self.clear_log)
-        self.clear_log_button.grid(row=0, column=3, padx=5, sticky=tk.W)
+        self.clear_log_button_widget = ttk.Button(button_frame, text="Clear Log", command=self.clear_log)
+        self.clear_log_button_widget.grid(row=0, column=3, padx=5, sticky='ew') # Use ew
 
-        # --- Status Bar ---
+        self.copy_log_button = ttk.Button(button_frame, text="Copy Log", command=self.copy_log) # Renamed variable
+        self.copy_log_button.grid(row=0, column=4, padx=5, sticky='ew')                         # Use ew
+
+        # --- Status Bar --- (Now at row 4)
         self.status_var = tk.StringVar(value="Status: Idle. Load settings or configure.")
         status_bar = ttk.Label(main_frame, textvariable=self.status_var, relief=tk.SUNKEN, anchor=tk.W, padding="2")
-        # Place at the bottom
-        status_bar.grid(row=4, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(5, 0))
+        status_bar.grid(row=4, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(5, 0)) # Correct row index
 
         # --- Load Initial Settings & Start Log Processing ---
-        self.load_settings()
+        self.load_settings()     # Load settings first
         self.process_log_queue() # Start checking the queue for messages
 
-        # 菜单栏
+        # --- Menu Bar ---
         menubar = tk.Menu(root)
         app_menu = tk.Menu(menubar, tearoff=0)
         if HAS_PYSTRAY:
             app_menu.add_command(label="Hide to Tray", command=self.hide_window)
-        app_menu.add_command(label="Exit", command=self.quit_application) # Use the new quit function
+        app_menu.add_command(label="Exit", command=self.quit_application) # Use the quit function
+        app_menu.add_command(label="help", command=self.help)
+        app_menu.add_command(label="about", command=self.about)
         menubar.add_cascade(label="Application", menu=app_menu)
         root.config(menu=menubar)
 
+        # --- Check for Start Minimized (Keep this at the end of __init__) ---
+        # Use after() to allow the window to initialize before hiding
+        if HAS_PYSTRAY and self.start_minimized_var.get():
+            # Delay slightly to ensure window and tray are ready
+            self.root.after(50, self.hide_window)
+
     # --- Methods (browse_*, load_settings, save_settings are the same) ---
+
+    def help(self):
+        help_window = tk.Toplevel()
+        help_window.title("Help - Ollama Launcher")
+        help_window.geometry("800x600")
+        help_window.minsize(800, 600) # 设置最小大小
+        help_window.iconbitmap('favicon.ico')
+
+        bg_color = "#efefef"
+        help_window.configure(bg=bg_color)
+
+        text_area = scrolledtext.ScrolledText(help_window, wrap=tk.WORD, width=80, height=20, bg=bg_color, fg="#1e1e1e", bd=0, highlightthickness=0)
+        text_area.pack(padx=10, pady=10, expand=True, fill=tk.BOTH)
+        text_area.insert(tk.END, HELP_TEXT)
+        text_area.config(state=tk.DISABLED) # 禁止用户编辑
+        close_button = ttk.Button(help_window, text="X", command=help_window.destroy)
+        close_button.pack(pady=5)
+        self.center_window(help_window)
+
+    def center_window(self, window):
+        window.update_idletasks()
+        width = window.winfo_width()
+        height = window.winfo_height()
+        x = (window.winfo_screenwidth() // 2) - (width // 2)
+        y = (window.winfo_screenheight() // 2) - (height // 2)
+        window.geometry(f"{width}x{height}+{x}+{y}")
+
+    def about(self):
+        about_window = tk.Toplevel()
+        about_window.title("About Ollama Launcher ...")
+        about_window.geometry("400x270")
+        about_window.resizable(False, False)
+        about_window.iconbitmap('favicon.ico')
+
+        # 设置背景色
+        bg_color = "#efefef"
+        fg_color = "#1e1e1e"
+
+        # 设置窗口背景色
+        about_window.configure(bg=bg_color)
+
+        # 使用 ttk.Style 统一 ttk 控件样式
+        style = ttk.Style()
+        style.configure("About.TFrame", background=bg_color)
+        style.configure("About.TLabel", background=bg_color, foreground=fg_color)
+        style.configure("About.TButton", background="#dcdad5", foreground=fg_color)
+
+        # 容器 Frame
+        container = ttk.Frame(about_window, style="About.TFrame")
+        container.pack(expand=True, fill="both")
+
+        info_text = f"""
+Ollama Launcher
+
+version: {VERSION}
+update: {DATE}
+license: GPLv3
+- NGC13009 -
+"""
+
+        label = tk.Label(container, text=info_text, justify="center", bg=bg_color, fg=fg_color)
+        label.pack(pady=10)
+
+        link = tk.Label(container, text="GitHub page: NGC13009/ollama-launcher.git", cursor="hand2", bg=bg_color, fg=fg_color)
+        link.pack(pady=5)
+
+        def callback(event):
+            webbrowser.open_new(r"https://github.com/NGC13009/ollama-launcher.git")
+
+        link.bind("<Button-1>", callback)
+
+        close_button = ttk.Button(container, text="Close", style="About.TButton", command=about_window.destroy)
+        close_button.pack(pady=10)
 
     def setup_tray_icon(self):
         """Sets up the system tray icon and menu."""
@@ -411,7 +529,7 @@ class OllamaGUI:
                 with open(CONFIG_PATH, 'r') as f:
                     loaded_settings = json.load(f)
                 self.settings = DEFAULT_SETTINGS.copy()
-                self.settings.update(loaded_settings)
+                self.settings.update({k: v for k, v in loaded_settings.items() if k != 'variables'})
                 if 'variables' in loaded_settings:
                     self.settings['variables'].update(loaded_settings['variables'])
                 self.status_var.set("Status: Settings loaded from config.json")
@@ -434,18 +552,36 @@ class OllamaGUI:
                         tk_var.set(0)
                 else:
                     tk_var.set(str(value))
+            elif key != 'ollama_exe_path' and key not in self.settings['variables'] and key in DEFAULT_SETTINGS['variables']:
+                # If key missing in config but exists in defaults, set default
+                value = DEFAULT_SETTINGS['variables'][key]
+                if isinstance(tk_var, tk.IntVar):
+                    tk_var.set(int(value))
+                else:
+                    tk_var.set(str(value))
+
+        # Update start_minimized var (handle potential missing key)
+        start_min_value = self.settings.get('start_minimized', DEFAULT_SETTINGS['start_minimized'])
+        self.start_minimized_var.set(bool(start_min_value))
+
+        # Ensure checkbox state reflects tray availability
+        if not HAS_PYSTRAY:
+            self.start_minimized_var.set(False)
+            if hasattr(self, 'start_minimized_check'): # Check if widget exists yet
+                self.start_minimized_check.config(state=tk.DISABLED)
 
     def save_settings(self):
-        current_settings = {'ollama_exe_path': self.vars['ollama_exe_path'].get(), 'variables': {}}
+        current_settings = {'ollama_exe_path': self.vars['ollama_exe_path'].get(), 'variables': {}, 'start_minimized': self.start_minimized_var.get()}
         for key, tk_var in self.vars.items():
             if key != 'ollama_exe_path':
                 current_settings['variables'][key] = str(tk_var.get())
+
         try:
             with open(CONFIG_PATH, 'w') as f:
                 json.dump(current_settings, f, indent=4)
             self.settings = current_settings
             self.status_var.set("Status: Settings saved to config.json")
-            messagebox.showinfo("Success", "Settings saved successfully.")
+            self.update_log("--- Settings saved successfully. ---\n")
         except Exception as e:
             messagebox.showerror("Error", f"Failed to save settings: {e}")
             self.status_var.set("Status: Error saving settings.")
@@ -456,9 +592,28 @@ class OllamaGUI:
         self.log_widget.active_codes = {'0'}
         self.log_widget.config(state=tk.DISABLED) # Explicitly set back to DISABLED
 
+    def copy_log(self):
+        log_content = self.log_widget.get('1.0', tk.END)
+
+        try:
+            self.root.clipboard_append(log_content)
+            self.update_log("--- copy log to clipboard. ---\n")
+
+        except tk.TclError as e:
+            messagebox.showerror("Error", f"复制到剪贴板时出错: {e}")
+
     # 3. Update update_log method
     def update_log(self, message):
         self.log_widget.write_ansi(message)
+
+    def app_info(self, message):
+        self.log_widget.write_ansi('[app info]\t' + message + '\n')
+
+    def app_warn(self, message):
+        self.log_widget.write_ansi('\033[93m[app warn]\033[0m\t' + message + '\n')
+
+    def app_err(self, message):
+        self.log_widget.write_ansi('\033[91m[app warn]\033[0m\t' + message + '\n')
 
     def process_log_queue(self):
         """Checks the queue for log messages and updates the widget."""
@@ -507,7 +662,7 @@ class OllamaGUI:
 
         try:
             self.status_var.set("Status: Starting Ollama...")
-            self.clear_log() # Clear log before starting new process
+            self.update_log("---                        ---\n")
             self.update_log("--- Starting Ollama Server ---\n")
             self.root.update_idletasks()
 
@@ -615,23 +770,23 @@ class OllamaGUI:
     # hide_window method removed as requested by replacing button
 
     def on_closing(self):
-        """Handle window close button (X). Hides to tray if available."""
-        if HAS_PYSTRAY and self.tray_icon:
-            self.hide_window() # Hide instead of closing
+        if self.is_running:
+            self.update_log("--- save config... ---\n")
+            self.save_settings()
+            self.update_log("--- stop ollama.exe... ---\n")
+            self.stop_ollama()
+            time.sleep(1)
+            self.update_log("--- stop ollama.exe ok ---\n")
+            self.root.destroy()
         else:
-                               # Fallback: Original exit behavior if tray is disabled
-            if self.is_running:
-                if messagebox.askyesno("Exit Confirmation", "Ollama is running. Do you want to stop it and exit?"):
-                    self.stop_ollama()
-                    time.sleep(1)
-                    self.root.destroy()
-            else:
-                if messagebox.askyesno("Exit Confirmation", "Are you sure you want to exit?"):
-                    self.root.destroy()
+            self.update_log("--- save config... ---\n")
+            self.save_settings()
+            self.root.destroy()
 
 
 if __name__ == "__main__":
+    print('run')
     root = tk.Tk()
-    app = OllamaGUI(root)
+    app = OllamaLauncherGUI(root)
     root.mainloop()
     print('ok')
