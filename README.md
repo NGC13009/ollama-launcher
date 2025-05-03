@@ -1,6 +1,8 @@
 # ollama-launcher
 better launcher of ollama
 
+![title png](./title.png)
+
 ### TODO
 
 1. [x]中英文帮助
