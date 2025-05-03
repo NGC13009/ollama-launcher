@@ -28,6 +28,16 @@ int main(int argc, char *argv[])
         printf("[WARN] OLLAMA_TMPDIR is not set\n");
     }
 
+    char *tmpdir2 = getenv("OLLAMA_USE_MLOCK");
+    if (tmpdir2)
+    {
+        printf("[INFO] OLLAMA_USE_MLOCK is set to: %s\n", tmpdir2);
+    }
+    else
+    {
+        printf("[WARN] OLLAMA_USE_MLOCK is not set\n");
+    }
+
     int count = 0;
     printf("[test] very long line, long long long long long long long long long long long long long long long long long long long long long long long long long long long long long long long long long long long long long long long long long long long long long long long long \n");
     while (1)
