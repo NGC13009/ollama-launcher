@@ -1,3 +1,13 @@
+# coding = utf-8
+# Arch   = manyArch
+#
+# @File name:       ollama_launcher.py
+# @brief:           ollama launcher 启动器主程序
+# @attention:       None
+# @TODO:            None
+# @Author:          NGC13009
+# @History:         2025-05-03		Create
+
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox, scrolledtext
 import subprocess
@@ -13,8 +23,11 @@ import re
 import webbrowser
 import threading
 from datetime import datetime
+import base64
+import io     # 需要 io.BytesIO
+from PIL import Image, ImageTk
 
-from help_text import HELP_TEXT, VERSION, DATE, WELCONE_TEXT, about_page, help_page
+from OL_resource import HELP_TEXT, VERSION, DATE, WELCONE_TEXT, about_page, help_page, icon_base64_data
 
 has_pystray = True
 
@@ -210,7 +223,7 @@ class AnsiColorText(tk.Text):
 
 class OllamaLauncherGUI:
 
-    def __init__(self, root):
+    def __init__(self, root: tk.Tk):
         global has_pystray # Ensure global is accessible
         self.root = root
         bg_color = "#efefef"
@@ -222,14 +235,14 @@ class OllamaLauncherGUI:
         self.root.minsize(750, 732)
         self.root.geometry("1280x752") # Adjusted default size
 
-        icon_path = os.path.join(SCRIPT_DIR, "favicon.ico")
-        if os.path.exists(icon_path):
-            try:
-                self.root.iconbitmap(icon_path)
-            except tk.TclError as e:
-                print(f"Warning: Could not load icon '{icon_path}'. Error: {e}")
-        else:
-            print(f"Warning: Icon file '{icon_path}' not found.")
+        try:
+            icon_bytes = base64.b64decode(icon_base64_data)
+            icon_stream = io.BytesIO(icon_bytes)
+            pillow_image = Image.open(icon_stream)
+            tk_icon = ImageTk.PhotoImage(pillow_image)
+            self.root.iconphoto(True, tk_icon)
+        except Exception as e:
+            print(f"error when get icon: {e}")
 
         self.settings = DEFAULT_SETTINGS.copy()
         self.vars = {}
@@ -252,6 +265,7 @@ class OllamaLauncherGUI:
         style.theme_use('clam') # Or 'alt', 'default', 'classic'
 
         # --- Main Frame ---
+        # 从这里开始是窗口布局相关的配置
         # This frame will contain the left panel and the right log panel
         main_frame = ttk.Frame(root, padding="10")
         main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
@@ -381,18 +395,25 @@ class OllamaLauncherGUI:
         self.load_settings()     # Load settings first
         self.process_log_queue() # Start checking the queue
 
-        # --- Menu Bar ---
+        # --- 菜单栏 ---
         menubar = tk.Menu(root)
+
+        # --- Application 菜单 ---
         app_menu = tk.Menu(menubar, tearoff=0)
         if has_pystray:
             app_menu.add_command(label="Hide to Tray", command=self.hide_window)
-        app_menu.add_separator()
-        app_menu.add_command(label="Help", command=self.help) # Combined help/about for simplicity
-        app_menu.add_command(label="About", command=self.about)
+        app_menu.add_command(label="save Log", command=self.save_log_to_file)
         app_menu.add_separator()
         app_menu.add_command(label="Exit", command=self.on_closing)
-        menubar.add_cascade(label="Application", menu=app_menu)
-        root.config(menu=menubar)
+        menubar.add_cascade(label="App", menu=app_menu) # 添加 Application 级联菜单
+
+        # --- Help&About 菜单 ---
+        help_about_menu = tk.Menu(menubar, tearoff=0)                  # 创建新的菜单对象
+        help_about_menu.add_command(label="Help", command=self.help)   # 添加 Help 命令
+        help_about_menu.add_command(label="About", command=self.about) # 添加 About 命令
+        menubar.add_cascade(label="Info", menu=help_about_menu)        # 添加 Help&About 级联菜单
+
+        root.config(menu=menubar) # 将修改后的菜单栏配置给主窗口
 
         # --- Check for Start Minimized (Keep this at the end of __init__) ---
         # Use after() to allow the window to initialize before hiding
@@ -417,18 +438,20 @@ class OllamaLauncherGUI:
         """Sets up the system tray icon and menu."""
         global has_pystray
         try:
-            # Load the icon image - MUST exist in the script's directory
-            icon_path = os.path.join(SCRIPT_DIR, "favicon.ico")
-            image = Image.open(icon_path)
-        except FileNotFoundError:
-            messagebox.showerror("Error", "Icon file 'favicon.ico' not found in script directory. Tray icon disabled.")
-            self.app_err("Icon file 'favicon.ico' not found in script directory. Tray icon disabled.")
-            print("Error: favicon.ico not found. Cannot create tray icon.")
+            icon_bytes = base64.b64decode(icon_base64_data)
+            icon_stream = io.BytesIO(icon_bytes)
+            image = Image.open(icon_stream) # <--- 这是替换后的核心行
+
+        except base64.binascii.Error:
+            messagebox.showerror("Error", f"Failed to load icon : wrong base64 bmp code.")
+            self.app_err(f"Failed to load icon : wrong base64 bmp code.")
+            print(f"Failed to load icon : wrong base64 bmp code: {e}")
             has_pystray = False
             return
+
         except Exception as e:
-            messagebox.showerror("Error", f"Failed to load favicon.ico: {e}. Tray icon disabled.")
-            self.app_err(f"Failed to load favicon.ico: {e}. Tray icon disabled.")
+            messagebox.showerror("Error", f"Failed to load base64 bmp icon: {e}. Tray icon disabled.")
+            self.app_err(f"Failed to load base64 bmp icon: {e}. Tray icon disabled.")
             print(f"Error loading icon: {e}")
             has_pystray = False
             return
@@ -761,7 +784,7 @@ class OllamaLauncherGUI:
         self.log_time()
         if self.tray_icon:
             self.tray_icon.stop()
-            print("Tray icon stopped.")
+            self.app_info("Tray icon stopped.")
 
         if self.is_running:
             self.app_info("save config...")
@@ -775,6 +798,55 @@ class OllamaLauncherGUI:
             self.app_info("save config...")
             self.save_settings()
             self.root.destroy()
+
+    def get_log_content(self) -> str:
+        # "1.0" 表示第一行第0个字符 (开始)
+        # "end-1c" 表示结束位置之前的那个字符 (获取所有实际输入的文本)
+        try:
+            content = self.log_widget.get("1.0", "end-1c")
+            return content
+        except tk.TclError as e:
+            print(f"Error when get log from console: {e}")
+            return ""
+
+    def save_log_to_file(self):
+        log_text = self.get_log_content()
+        if not log_text:
+            messagebox.showinfo("Note", "Empty log.")
+            return
+
+        # 1. 生成建议的默认文件名
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        default_filename = f"ollama_launcher_{timestamp}.log"
+
+        # 2. 获取当前工作目录作为默认打开路径
+        initial_directory = os.getcwd()
+
+        # 3. 定义文件类型过滤器
+        file_types = [('Log files', '*.log'), ('Text files', '*.txt'), ('All files', '*.*')]
+
+        # 4. 调用 asksaveasfilename 打开文件保存对话框
+        file_path = filedialog.asksaveasfilename(
+            title="save log ...",                 # 对话框标题
+            initialdir=initial_directory,         # 初始目录
+            initialfile=default_filename,         # 默认文件名
+            defaultextension=".log",              # 默认扩展名 (如果用户没输入)
+            filetypes=file_types                  # 文件类型过滤器
+        )
+
+        # 5. 检查用户是否选择了文件路径 (如果用户取消，则返回空字符串 "")
+        if not file_path:
+            return # 用户取消，则退出函数
+
+        # 6. 如果用户选择了路径，则尝试写入文件
+        try:
+            with open(file_path, 'w', encoding='utf-8') as f:
+                f.write(log_text)
+            self.app_info(f"log save to: {file_path}")
+        except IOError as e:
+            self.app_err(f"saving log : '{file_path}' : an IO error : {e}")
+        except Exception as e:
+            self.app_err(f"saving log : '{file_path}' : get error : {e}")
 
 
 if __name__ == "__main__":

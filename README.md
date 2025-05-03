@@ -14,3 +14,4 @@ better launcher of ollama
 9. [o]默认尺寸
 10. [o]增加hide按钮
 11. [o]时间戳
+12. []存日志
