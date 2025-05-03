@@ -27,7 +27,7 @@ import base64
 import io     # 需要 io.BytesIO
 from PIL import Image, ImageTk
 
-from OL_resource import HELP_TEXT, VERSION, DATE, WELCONE_TEXT, about_page, help_page, icon_base64_data
+from OL_resource import HELP_TEXT, VERSION, DATE, WELCONE_TEXT, icon_base64_data, INFO_TEXT, GITLINK, GITLINK_BOTTOM
 
 has_pystray = True
 
@@ -429,10 +429,71 @@ class OllamaLauncherGUI:
     # --- Methods (browse_*, load_settings, save_settings are the same) ---
 
     def help(self):
-        help_page()
+        help_window = tk.Toplevel()
+        help_window.title("Help - Ollama Launcher")
+        help_window.geometry("800x600")
+        help_window.minsize(800, 600) # 设置最小大小
+        try:
+            icon_bytes = base64.b64decode(icon_base64_data)
+            icon_stream = io.BytesIO(icon_bytes)
+            pillow_image = Image.open(icon_stream)
+            tk_icon = ImageTk.PhotoImage(pillow_image)
+            help_window.iconphoto(True, tk_icon)
+        except Exception as e:
+            print(f"help page: error when get icon: {e}")
+
+        bg_color = "#efefef"
+        help_window.configure(bg=bg_color)
+        text_area = scrolledtext.ScrolledText(help_window, wrap=tk.WORD, width=80, height=20, bg=bg_color, fg="#1e1e1e", bd=0, highlightthickness=0)
+        text_area.pack(padx=10, pady=10, expand=True, fill=tk.BOTH)
+        text_area.insert(tk.END, HELP_TEXT)
+        text_area.config(state=tk.DISABLED) # 禁止用户编辑
+        close_button = ttk.Button(help_window, text="X", command=help_window.destroy)
+        close_button.pack(pady=5)
+        help_window.update_idletasks()
+        width = help_window.winfo_width()
+        height = help_window.winfo_height()
+        x = (help_window.winfo_screenwidth() // 2) - (width // 2)
+        y = (help_window.winfo_screenheight() // 2) - (height // 2)
+        help_window.geometry(f"{width}x{height}+{x}+{y}")
 
     def about(self):
-        about_page()
+        about_window = tk.Toplevel()
+        about_window.title("About - Ollama Launcher")
+        about_window.geometry("400x200")
+        about_window.resizable(False, False)
+        try:
+            icon_bytes = base64.b64decode(icon_base64_data)
+            icon_stream = io.BytesIO(icon_bytes)
+            pillow_image = Image.open(icon_stream)
+            tk_icon = ImageTk.PhotoImage(pillow_image)
+            about_window.iconphoto(True, tk_icon)
+        except Exception as e:
+            print(f"help page: error when get icon: {e}")
+            # Handle case where icon data might be missing or invalid
+            pass
+
+        bg_color = "#efefef"
+        fg_color = "#1e1e1e"
+        about_window.configure(bg=bg_color)
+
+        style = ttk.Style()
+        style.configure("About.TFrame", background=bg_color)
+        style.configure("About.TLabel", background=bg_color, foreground=fg_color)
+
+        container = ttk.Frame(about_window, style="About.TFrame")
+        container.pack(expand=True, fill="both", padx=10, pady=10)
+
+        label = ttk.Label(container, text=INFO_TEXT, justify="center", style="About.TLabel")
+        label.pack(pady=10)
+
+        def open_github_link():
+            webbrowser.open_new(GITLINK)
+
+        style = ttk.Style()
+        style.configure("About.TButton")
+        github_button = ttk.Button(container, text=GITLINK_BOTTOM, style="About.TButton", command=open_github_link)
+        github_button.pack()
 
     def setup_tray_icon(self):
         """Sets up the system tray icon and menu."""
@@ -440,7 +501,7 @@ class OllamaLauncherGUI:
         try:
             icon_bytes = base64.b64decode(icon_base64_data)
             icon_stream = io.BytesIO(icon_bytes)
-            image = Image.open(icon_stream) # <--- 这是替换后的核心行
+            image = Image.open(icon_stream)
 
         except base64.binascii.Error:
             messagebox.showerror("Error", f"Failed to load icon : wrong base64 bmp code.")
