@@ -9,6 +9,17 @@
 - Ollama Launcher 旨在简化配置ollama server的启动参数。免去不断修改环境变量与启动停止守护进程的麻烦。如此一来，修改ollama守护进程的运行参数，启停服务进程将会更加方便。
 - Ollama Launcher 不能管理模型，即只能启动和停止 ollama 服务进程，不能拉取，运行，配置模型。为了配置模型，你仍旧需要使用命令行。
 
+ollama-launcher的直接可执行文件下载链接 : [click here](https://github.com/NGC13009/ollama-launcher/releases/tag/v1.0)
+
+启动器主要是为了避免自动更新，以及更方便的设置启动参数。为此，推荐使用二进制可执行文件替代ollama setup的安装方式: [ollama download](https://github.com/ollama/ollama/releases) ，下载zip压缩包并解压到某个路径下，将`ollama.exe`配置为系统环境变量`Path`内，之后启动 ollama-launcher 并配置`ollama.exe`的路径即可。
+
+如果仍旧希望自动更新，则从ollama官网: [ollama](https://ollama.com/) 下载setup安装程序直接安装，然后找到`ollama.exe`的路径配置即可。注意需要关闭ollama的默认开机自启动，以使用ollama-launcher完全代理后台服务。需要更新时，关闭ollama-launcher，使用安装的ollama启动，即可自动更新。
+
+如果您使用ollama setup安装，那么默认路径是：
+`C:\Users\<你的用户名>\AppData\Local\Programs\Ollama\ollama.exe`
+，你需要将这个地址配置为ollama-launcher内启动ollama的地址。
+此外，你还可以直接自定义模型的存储路径（默认是在C盘）。注意，这个操作不会自动搬移已经下载的模型。
+
 ## 使用须知
 
 1. 该程序由Gemini2.5pro生成，目前未经过严格测试。
