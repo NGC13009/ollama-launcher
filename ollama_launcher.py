@@ -62,7 +62,8 @@ DEFAULT_SETTINGS = {
         "OLLAMA_INTEL_GPU": "0",
         "OLLAMA_DEBUG": "0",
     },
-    "start_minimized": False
+    "start_minimized": False,
+    "user_env": {}
 }
 
 
@@ -136,7 +137,6 @@ class AnsiColorText(tk.Text):
 
         # Keep track of currently active SGR codes for applying tags
         self.active_codes = {'0'} # Start with reset state
-        self.lock = threading.Lock()
 
     def _get_font_config(self, bold=False, italic=False):
         """Gets a font configuration tuple based on the widget's default font."""
@@ -229,8 +229,8 @@ class AnsiColorText(tk.Text):
 class OllamaLauncherGUI:
 
     def __init__(self, root: tk.Tk):
-        global has_pystray     # Ensure global is accessible
-        self.user_env = dict() # TODO 自定义env
+        global has_pystray # Ensure global is accessible
+        self.user_env = dict()
         self.root = root
         bg_color = "#efefef"
         root.configure(bg=bg_color)
@@ -408,7 +408,10 @@ class OllamaLauncherGUI:
         app_menu = tk.Menu(menubar, tearoff=0)
         if has_pystray:
             app_menu.add_command(label="Hide to Tray", command=self.hide_window)
-        app_menu.add_command(label="Save Log", command=self.save_log_to_file)
+        app_menu.add_separator()
+        app_menu.add_command(label="Edit additional Environment", command=self.open_env_editor)
+        app_menu.add_command(label="Save Config", command=self.save_settings)
+        app_menu.add_command(label="Reset Config", command=self.reset_settings)
         app_menu.add_separator()
         app_menu.add_command(label="Exit", command=self.on_closing)
         menubar.add_cascade(label="App", menu=app_menu) # 添加 Application 级联菜单
@@ -418,10 +421,10 @@ class OllamaLauncherGUI:
         action_menu.add_command(label="▶ Ollama Run", command=self.start_ollama)
         action_menu.add_command(label="■ Ollama Stop", command=self.stop_ollama)
         action_menu.add_separator()
+        action_menu.add_command(label="Save Log", command=self.save_log_to_file)
         action_menu.add_command(label="Copy Log", command=self.copy_log)
-        action_menu.add_command(label="Clear Log", command=self.clear_log)
         action_menu.add_separator()
-        action_menu.add_command(label="Edit additional Environment", command=self.open_env_editor)
+        action_menu.add_command(label="Clear Log", command=self.clear_log)
         menubar.add_cascade(label="Action", menu=action_menu)
 
         # --- Help&About 菜单 ---
@@ -577,9 +580,10 @@ class OllamaLauncherGUI:
     def hide_window(self):
         self.app_info("Hide the Ollama Launcher main Window to tray.")
         self.root.withdraw()
-        # Optional: Notify pystray (might show a balloon tip, depending on platform)
-        if self.tray_icon and self.tray_icon.HAS_NOTIFICATION:
-            self.tray_icon.notify("Ollama Launcher hidden to tray.")
+
+        # 我觉得还是算了，不要每次最小化都弹出提示
+        # if self.tray_icon and self.tray_icon.HAS_NOTIFICATION:
+        #     self.tray_icon.notify("Ollama Launcher hidden to tray.")
 
     def show_window(self):
         self.app_info("Shows the Ollama Launcher main Window from hidden state.")
@@ -619,8 +623,25 @@ class OllamaLauncherGUI:
             self.app_err(f"Failed to load settings: {e}")
             self.settings = DEFAULT_SETTINGS.copy()
             self.status_var.set("Status: Error loading settings. Using defaults.")
-            self.app_err("Status: Error loading settings. Using defaults.")
 
+        self.enable_settings()
+
+    def reset_settings(self):
+        current_settings = DEFAULT_SETTINGS
+
+        try:
+            with open(CONFIG_PATH, 'w') as f:
+                json.dump(current_settings, f, indent=4)
+            self.settings = current_settings
+            self.status_var.set("Status: Reset Settings & saved to config.json")
+            self.app_info("Reset Settings & saved successfully.")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to save settings: {e} in reset_setting function.")
+            self.app_err(f"Failed to save settings: {e} in reset_setting function.")
+            self.status_var.set("Status: Error saving settings in reset_setting function.")
+        self.enable_settings()
+
+    def enable_settings(self):
         self.vars['ollama_exe_path'].set(self.settings.get('ollama_exe_path', ''))
         for key, tk_var in self.vars.items():
             if key != 'ollama_exe_path' and key in self.settings['variables']:
@@ -643,6 +664,7 @@ class OllamaLauncherGUI:
         # Update start_minimized var (handle potential missing key)
         start_min_value = self.settings.get('start_minimized', DEFAULT_SETTINGS['start_minimized'])
         self.start_minimized_var.set(bool(start_min_value))
+        self.user_env = self.settings.get('user_env', DEFAULT_SETTINGS['user_env'])
 
         # Ensure checkbox state reflects tray availability
         if not has_pystray:
@@ -652,7 +674,7 @@ class OllamaLauncherGUI:
         self.log_time()
 
     def save_settings(self):
-        current_settings = {'ollama_exe_path': self.vars['ollama_exe_path'].get(), 'variables': {}, 'start_minimized': self.start_minimized_var.get()}
+        current_settings = {'ollama_exe_path': self.vars['ollama_exe_path'].get(), 'variables': {}, 'start_minimized': self.start_minimized_var.get(), "user_env": self.user_env}
         for key, tk_var in self.vars.items():
             if key != 'ollama_exe_path':
                 current_settings['variables'][key] = str(tk_var.get())
@@ -667,7 +689,6 @@ class OllamaLauncherGUI:
             messagebox.showerror("Error", f"Failed to save settings: {e}")
             self.app_err(f"Failed to save settings: {e}")
             self.status_var.set("Status: Error saving settings.")
-            self.app_err("Status: Error saving settings.")
         self.log_time()
 
     def clear_log(self):
@@ -777,6 +798,8 @@ class OllamaLauncherGUI:
             self.is_running = True
             self.status_var.set(f"Status: Ollama server running (PID: {self.ollama_process.pid})")
             self.app_info(f"Status: Ollama server running (PID: {self.ollama_process.pid})")
+            ddd = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            self.tray_icon.notify(f"Ollama Server started. PID: {self.ollama_process.pid}\nTime : {ddd}")
             self.start_button.config(state=tk.DISABLED)
             self.stop_button.config(state=tk.NORMAL)
 
@@ -802,8 +825,6 @@ class OllamaLauncherGUI:
     def monitor_process_exit(self):
         """Waits for process exit and schedules GUI update."""
         exit_code = self.ollama_process.wait()
-        # Process finished, schedule GUI update on main thread
-        self.tray_icon.notify(f"Ollama Server stopped with code : {exit_code}\nTime : {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}")
         self.root.after(0, self.update_status_on_exit, exit_code)
 
     def update_status_on_exit(self, exit_code):
@@ -848,12 +869,13 @@ class OllamaLauncherGUI:
             exit_code = self.ollama_process.poll()
             self.is_running = False
             self.ollama_process = None # Clear process object
-            status_msg = f"Status: Ollama server stopped (Exit Code: {exit_code})." if exit_code is not None else "Status: Ollama stopped (Exit code unknown)."
+            status_msg = f"Status: Ollama server stopped (Exit Code: {exit_code})."
             self.status_var.set(status_msg)
             self.app_info(status_msg)
             self.start_button.config(state=tk.NORMAL)
             self.stop_button.config(state=tk.DISABLED)
-
+            ddd = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            self.tray_icon.notify(f"Ollama Server stopped with code : {exit_code}\nTime : {ddd}")
         except Exception as e:
             messagebox.showerror("Error", f"Error stopping Ollama: {e}")
             self.app_err(f"Error stopping Ollama: {e}")
@@ -871,19 +893,29 @@ class OllamaLauncherGUI:
     def on_closing(self):
         self.app_info("exit...")
         self.log_time()
-        if self.tray_icon:
-            self.tray_icon.stop()
-            self.app_info("Tray icon stopped.")
 
         if self.is_running:
             self.app_info("stop ollama.exe...")
             self.stop_ollama()
-            time.sleep(1)
-            self.app_info("stop ollama.exe ok")
 
-        self.app_info("save config...")
-        self.save_settings()
-        self.root.destroy()
+            if self.tray_icon:
+                self.app_info("stop tray icon...")
+                self.root.after(950, self.tray_icon.stop) # 必须小于self.root.destroy()的触发时间
+
+            self.app_info("save config...")
+            self.save_settings()
+            self.app_warn("OK. Will exit after 1 second...")
+            self.root.after(1000, self.root.destroy)
+
+        else:
+            if self.tray_icon:
+                self.app_info("stop tray icon...")
+                self.tray_icon.stop()
+
+            self.app_info("save config...")
+            self.save_settings()
+            self.app_warn("OK. Will exit...")
+            self.root.destroy()
 
     def get_log_content(self) -> str:
         # "1.0" 表示第一行第0个字符 (开始)
@@ -933,6 +965,131 @@ class OllamaLauncherGUI:
             self.app_err(f"saving log : '{file_path}' : an IO error : {e}")
         except Exception as e:
             self.app_err(f"saving log : '{file_path}' : get error : {e}")
+
+    def open_env_editor(self):
+        # --- Create the Toplevel window ---
+        editor_window = tk.Toplevel(self.root)
+        editor_window.title("Additional Environment Variable Editor")
+        editor_window.geometry("450x400")
+        editor_window.minsize(450, 400)
+        editor_window.maxsize(450, 8192)
+
+        # --- Data Storage ---
+        # List to keep track of row widgets (frame, key_entry, value_entry)
+        # This makes adding/removing rows and getting values easier
+        row_widgets = []
+
+        # --- Main Frames ---
+        # Frame to hold the scrollable entry rows
+        header_frame = tk.Frame(editor_window)
+        header_frame.pack(pady=(5, 0), padx=10, fill=tk.X)
+
+        # Use a Canvas and Frame for scrolling if many entries are expected
+        canvas_frame = tk.Frame(editor_window)
+        canvas_frame.pack(pady=5, padx=10, fill=tk.BOTH, expand=True)
+
+        canvas = tk.Canvas(canvas_frame)
+        scrollbar = ttk.Scrollbar(canvas_frame, orient="vertical", command=canvas.yview)
+        # Use Frame from ttk if you imported it for better theme consistency
+        scrollable_frame = tk.Frame(canvas)
+
+        scrollable_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+        # Frame for control buttons
+        button_frame = tk.Frame(editor_window)
+        button_frame.pack(pady=(5, 10), padx=10, fill=tk.X)
+
+        # --- Headers ---
+        tk.Label(header_frame, text="Key").pack(side=tk.LEFT, padx=(5, 0), expand=True, anchor='w')
+        tk.Label(header_frame, text="Value").pack(side=tk.LEFT, padx=(5, 50), expand=True, anchor='w') # Extra padding to align roughly
+
+        # --- Functions for Row Management ---
+        def add_row(key="", value=""):
+            """Adds a new row with key/value entries to the scrollable_frame."""
+            row_frame = tk.Frame(scrollable_frame)
+            row_frame.pack(fill=tk.X, pady=2)
+
+            key_entry = tk.Entry(row_frame, width=25)
+            key_entry.pack(side=tk.LEFT, padx=(0, 5), expand=True, fill=tk.X)
+            key_entry.insert(0, key)
+
+            value_entry = tk.Entry(row_frame, width=25)
+            value_entry.pack(side=tk.LEFT, padx=(0, 5), expand=True, fill=tk.X)
+            value_entry.insert(0, value)
+
+            # Simple remove button per row (alternative to "remove last")
+            remove_button = tk.Button(row_frame, text="-", command=lambda: remove_specific_row(row_frame, row_widgets))
+            remove_button.pack(side=tk.LEFT, padx=(5, 0))
+
+            # Store references
+            row_info = {"frame": row_frame, "key": key_entry, "value": value_entry, "remove_btn": remove_button}
+            row_widgets.append(row_info)
+            update_remove_buttons_state() # Enable/disable remove buttons
+
+        def remove_specific_row(row_frame_to_remove, row_widgets):
+            """Removes the specific row associated with the button pressed."""
+            # Find the index of the row to remove
+            index_to_remove = -1
+            for i, row_info in enumerate(row_widgets):
+                if row_info["frame"] == row_frame_to_remove:
+                    index_to_remove = i
+                    break
+
+            # Destroy widgets
+            row_widgets[index_to_remove]["frame"].destroy()
+            # Remove from list
+            del row_widgets[index_to_remove]
+            update_remove_buttons_state() # Update button states after removal
+
+        def update_remove_buttons_state():
+            for row_info in row_widgets:
+                # Check if button still exists before configuring
+                if row_info["remove_btn"].winfo_exists():
+                    row_info["remove_btn"].config(state=tk.NORMAL)
+
+        # --- Function to Save and Close ---
+        def save_and_close():
+            """Collects data from entries, updates self.user_env, and closes."""
+            new_env = {}
+            for row_info in row_widgets:
+                key = row_info["key"].get().strip()
+                value = row_info["value"].get().strip()
+                if key: # Only add if key is not empty
+                    new_env[key] = value
+
+            # Update the parent's attribute
+            self.user_env = new_env
+            editor_window.destroy() # Close the Toplevel window
+
+        # --- Create Control Buttons ---
+        add_button = tk.Button(button_frame, text="   +   ", command=add_row)
+        add_button.pack(side=tk.LEFT, padx=5)
+
+        save_button = tk.Button(button_frame, text="   OK   ", command=save_and_close) # Highlight save
+        save_button.pack(side=tk.RIGHT, padx=5)
+
+        # --- Populate Initial Rows ---
+        if len(self.user_env) == 0:
+            add_row()
+        for k, v in self.user_env.items():
+            add_row(k, v)
+
+        # --- Handle Window Close Button (X) ---
+        # Make the 'X' button also trigger the save action
+        editor_window.protocol("WM_DELETE_WINDOW", save_and_close)
+
+        # --- Final Setup ---
+        update_remove_buttons_state()        # Set initial state of remove buttons
+        editor_window.transient(self.root)   # Keep the editor window on top of the main window
+        editor_window.grab_set()             # Make the editor window modal (prevents interaction with main window)
+        self.root.wait_window(editor_window) # Wait until the editor window is closed
+        self.app_info(f"Updated self.user_env: {self.user_env}")
 
 
 if __name__ == "__main__":
