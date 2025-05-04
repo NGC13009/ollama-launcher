@@ -408,6 +408,7 @@ class OllamaLauncherGUI:
         app_menu = tk.Menu(menubar, tearoff=0)
         if has_pystray:
             app_menu.add_command(label="Hide to Tray", command=self.hide_window)
+        app_menu.add_command(label="Print Welcome", command=self.welcome_text)
         app_menu.add_separator()
         app_menu.add_command(label="Edit additional Environment", command=self.open_env_editor)
         app_menu.add_command(label="Save Config", command=self.save_settings)
@@ -440,7 +441,9 @@ class OllamaLauncherGUI:
         if has_pystray and self.start_minimized_var.get():
             self.start_ollama()
             self.root.after(100, self.hide_window) # Slightly longer delay
+        self.welcome_text()
 
+    def welcome_text(self):
         self.app_info("-+++-----------------------------------------------+++-")
         self.app_info(WELCONE_TEXT)
         self.app_info("this is a ollama launcher info text demo.")
@@ -881,7 +884,7 @@ class OllamaLauncherGUI:
             self.app_err(f"Error stopping Ollama: {e}")
             self.status_var.set(f"Status: Error stopping Ollama - {e}")
             self.app_err(f"Error stopping Ollama: {e}")
-            # Attempt to reset state even on error
+                                       # Attempt to reset state even on error
             self.is_running = False
             self.ollama_process = None
             self.start_button.config(state=tk.NORMAL)
