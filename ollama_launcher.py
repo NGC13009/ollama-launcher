@@ -238,8 +238,8 @@ class OllamaLauncherGUI:
         self.root.title("Ollama Launcher")
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
         # Increased minsize to better accommodate the side-by-side layout
-        self.root.minsize(750, 732)
-        self.root.geometry("1280x752") # Adjusted default size
+        self.root.minsize(1024, 732)
+        self.root.geometry("1024x732") # Adjusted default size
 
         try:
             icon_bytes = base64.b64decode(icon_base64_data)
@@ -850,6 +850,7 @@ class OllamaLauncherGUI:
             self.stop_button.config(state=tk.DISABLED)
             self.status_var.set("Status: Idle (Ollama was not running).")
             self.app_warn("Ollama was not running.")
+            messagebox.showinfo("Note", f"Ollama was not running.")
             return
 
         self.status_var.set("Status: Stopping Ollama...")
