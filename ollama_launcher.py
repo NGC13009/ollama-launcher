@@ -309,25 +309,24 @@ class OllamaLauncherGUI:
         row_num = 0
         for key, default_value in DEFAULT_SETTINGS["variables"].items():
             ttk.Label(env_frame, text=f"{key}:").grid(row=row_num, column=0, sticky=tk.W, padx=5, pady=2)
-            if key in ["OLLAMA_ENABLE_CUDA", "OLLAMA_FLASH_ATTENTION", "OLLAMA_USE_MLOCK", "OLLAMA_DEBUG", "OLLAMA_MULTIUSER_CACHE", "OLLAMA_INTEL_GPU", "OLLAMA_DEBUG"]: # Added OLLAMA_DEBUG
+            if key in ["OLLAMA_ENABLE_CUDA", "OLLAMA_FLASH_ATTENTION", "OLLAMA_USE_MLOCK", "OLLAMA_DEBUG", "OLLAMA_MULTIUSER_CACHE", "OLLAMA_INTEL_GPU"]: # 是 bool
                 try:
                     init_val = int(default_value)
                 except (ValueError, TypeError):
-                    init_val = 0                                                                                                                                          # Default to 0 if conversion fails
+                    init_val = 0
                 self.vars[key] = tk.IntVar(value=init_val)
-                ttk.Checkbutton(env_frame, variable=self.vars[key]).grid(row=row_num, column=1, columnspan=2, sticky=tk.W, padx=5, pady=2)                                # Span needed for alignment
-            elif key in ["OLLAMA_MODELS", "OLLAMA_TMPDIR", "OLLAMA_CONTEXT_LENGTH"]:
+                ttk.Checkbutton(env_frame, variable=self.vars[key]).grid(row=row_num, column=1, columnspan=2, sticky=tk.W, padx=5, pady=2)
+            elif key in ["OLLAMA_MODELS", "OLLAMA_TMPDIR"]:                                                                                               # 需要配置路径的
                 self.vars[key] = tk.StringVar(value=default_value)
                 entry_frame = ttk.Frame(env_frame)
-                                                                                                                                                                          # Span 2 columns within env_frame grid
+
                 entry_frame.grid(row=row_num, column=1, columnspan=2, sticky=(tk.W, tk.E))
                 entry_frame.columnconfigure(0, weight=1)
-                                                                                                                                                                          # Reduced width slightly
+
                 ttk.Entry(entry_frame, textvariable=self.vars[key], width=30).grid(row=0, column=0, sticky=(tk.W, tk.E), padx=(5, 0))
                 ttk.Button(entry_frame, text="/", command=lambda k=key: self.browse_directory(k), width=2).grid(row=0, column=1, padx=5)
-            else:
+            else:  # 其他就正常文本框
                 self.vars[key] = tk.StringVar(value=default_value)
-                                                                                                                                                                          # Reduced width slightly, span 2 cols within env_frame grid
                 ttk.Entry(env_frame, textvariable=self.vars[key], width=30).grid(row=row_num, column=1, columnspan=2, sticky=(tk.W, tk.E), padx=5, pady=2)
             row_num += 1
 
