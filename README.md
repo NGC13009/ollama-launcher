@@ -1,13 +1,26 @@
 # ollama-launcher
 better launcher of ollama
 
+中文说明：[Chinese readme](README_CN.md)
+
 ![title png](./title.png)
 
 Ollama Launcher is a launcher for ollama that simplifies starting and managing ollama service processes. It aims to streamline configuration of ollama server startup parameters, eliminating the need to constantly modify environment variables or manually start/stop daemon processes. With Ollama Launcher, modifying runtime parameters of the ollama daemon and managing service startup/stopping becomes much more convenient.
 
 **Note**: Ollama Launcher cannot manage models - it can only start and stop ollama service processes, not pull, run, or configure models. To manage models, you will still need to use the command line interface.
 
-[Chinese readme](README_CN.md)
+**Direct executable download link for ollama-launcher:** [click here](https://github.com/NGC13009/ollama-launcher/releases/tag/v1.0)
+
+The launcher is primarily designed to prevent automatic updates and make it more convenient to set startup parameters. Therefore, we recommend using the binary executable instead of installing via the Ollama setup installer:  
+[Ollama downloads](https://github.com/ollama/ollama/releases) — download the zip package, extract it to a desired path, and add the `ollama.exe` file to your system's environment variable `Path`. Then launch ollama-launcher and configure the path to `ollama.exe`.
+
+If you still prefer automatic updates, download the setup installer from the official Ollama website: [ollama](https://ollama.com/) and install it directly. Then locate the `ollama.exe` path and configure it in ollama-launcher. Please note that you need to disable Ollama’s default auto-startup at login, so that ollama-launcher can fully manage the background service. When you want to update, simply close ollama-launcher and launch the installed Ollama application, which will trigger an automatic update.
+
+If you used the Ollama setup installer, the default path will be:  
+`C:\Users\<YourUsername>\AppData\Local\Programs\Ollama\ollama.exe`  
+You should configure this path inside ollama-launcher for launching Ollama.
+
+Additionally, you can also customize the model storage path (default is on the C drive). Note that this operation does **not** automatically move any already downloaded models.
 
 ## Important Notes
 
