@@ -3,6 +3,11 @@
 #
 # @File name:       ollama_launcher.py
 # @brief:           ollama launcher 启动器主程序
+#                       打包：在当前conda环境下运行
+#                           ```
+#                           # -w 不要命令行终端， -F打包为单个文件，-i指定图标
+#                           pyinstaller -w .\ollama_launcher.py -i .\favicon.ico
+#                           ```.
 # @attention:       None
 # @TODO:            None
 # @Author:          NGC13009
@@ -224,7 +229,8 @@ class AnsiColorText(tk.Text):
 class OllamaLauncherGUI:
 
     def __init__(self, root: tk.Tk):
-        global has_pystray # Ensure global is accessible
+        global has_pystray     # Ensure global is accessible
+        self.user_env = dict() # TODO 自定义env
         self.root = root
         bg_color = "#efefef"
         root.configure(bg=bg_color)
@@ -331,7 +337,7 @@ class OllamaLauncherGUI:
 
         self.start_minimized_check = ttk.Checkbutton(
             env_frame,                                                                                         # Parent is env_frame
-            text="Start minimized to tray on launch.",                                                         # Shortened text
+            text="Auto start ollama & hide to tray on launch.",                                                # Shortened text
             variable=self.start_minimized_var)
         self.start_minimized_check.grid(row=row_num, column=0, columnspan=3, sticky=tk.W, padx=5, pady=(5, 5)) # Span 3
 
@@ -350,10 +356,10 @@ class OllamaLauncherGUI:
         self.style.configure('Start.TButton', background='#00aa00')
         self.style.configure('Stop.TButton', background='#aa0000')
 
-        self.start_button = ttk.Button(button_frame, text="ollama run", command=self.start_ollama, style='Start.TButton')
+        self.start_button = ttk.Button(button_frame, text="Ollama Run", command=self.start_ollama, style='Start.TButton')
         self.start_button.grid(row=0, column=0, padx=2, sticky='ew')
 
-        self.stop_button = ttk.Button(button_frame, text="ollama stop", command=self.stop_ollama, style='Stop.TButton', state=tk.DISABLED)
+        self.stop_button = ttk.Button(button_frame, text="Ollama Stop", command=self.stop_ollama, style='Stop.TButton', state=tk.DISABLED)
         self.stop_button.grid(row=0, column=1, padx=2, sticky='ew')
 
         self.copy_log_button = ttk.Button(button_frame, text="Copy Log", command=self.copy_log)
@@ -402,10 +408,21 @@ class OllamaLauncherGUI:
         app_menu = tk.Menu(menubar, tearoff=0)
         if has_pystray:
             app_menu.add_command(label="Hide to Tray", command=self.hide_window)
-        app_menu.add_command(label="save Log", command=self.save_log_to_file)
+        app_menu.add_command(label="Save Log", command=self.save_log_to_file)
         app_menu.add_separator()
         app_menu.add_command(label="Exit", command=self.on_closing)
         menubar.add_cascade(label="App", menu=app_menu) # 添加 Application 级联菜单
+
+        # --- action 菜单 ---
+        action_menu = tk.Menu(menubar, tearoff=0)
+        action_menu.add_command(label="▶ Ollama Run", command=self.start_ollama)
+        action_menu.add_command(label="■ Ollama Stop", command=self.stop_ollama)
+        action_menu.add_separator()
+        action_menu.add_command(label="Copy Log", command=self.copy_log)
+        action_menu.add_command(label="Clear Log", command=self.clear_log)
+        action_menu.add_separator()
+        action_menu.add_command(label="Edit additional Environment", command=self.open_env_editor)
+        menubar.add_cascade(label="Action", menu=action_menu)
 
         # --- Help&About 菜单 ---
         help_about_menu = tk.Menu(menubar, tearoff=0)                  # 创建新的菜单对象
@@ -418,17 +435,21 @@ class OllamaLauncherGUI:
         # --- Check for Start Minimized (Keep this at the end of __init__) ---
         # Use after() to allow the window to initialize before hiding
         if has_pystray and self.start_minimized_var.get():
+            self.start_ollama()
             self.root.after(100, self.hide_window) # Slightly longer delay
 
+        self.app_info("-+++-----------------------------------------------+++-")
         self.app_info(WELCONE_TEXT)
         self.app_info("this is a ollama launcher info text demo.")
         self.app_warn("this is a ollama launcher warning text demo.")
         self.app_err("this is a ollama launcher error text demo.")
         self.log_time()
+        self.app_info("-+++-----------------------------------------------+++-")
 
     # --- Methods (browse_*, load_settings, save_settings are the same) ---
 
     def help(self):
+        self.app_info("open Help Page.")
         help_window = tk.Toplevel()
         help_window.title("Help - Ollama Launcher")
         help_window.geometry("800x600")
@@ -458,6 +479,7 @@ class OllamaLauncherGUI:
         help_window.geometry(f"{width}x{height}+{x}+{y}")
 
     def about(self):
+        self.app_info("open About Page.")
         about_window = tk.Toplevel()
         about_window.title("About - Ollama Launcher")
         about_window.geometry("400x200")
@@ -525,14 +547,16 @@ class OllamaLauncherGUI:
                 lambda: self.root.after(0, self.show_window), # Schedule show_window
                 default=True                                  # Default action on left-click
             ),
+            pystray.Menu.SEPARATOR,
             pystray.MenuItem(
-                'Start Ollama',
+                '▶ Ollama Run',
                 lambda: self.root.after(0, self.start_ollama) # Schedule start_ollama
             ),
             pystray.MenuItem(
-                'Stop Ollama',
+                '■ Ollama Stop',
                 lambda: self.root.after(0, self.stop_ollama)  # Schedule stop_ollama
             ),
+            pystray.Menu.SEPARATOR,
             pystray.MenuItem(
                 'Exit',
                 lambda: self.root.after(0, self.on_closing)   # Schedule on_closing()
@@ -548,17 +572,17 @@ class OllamaLauncherGUI:
             tray_thread = threading.Thread(target=self.tray_icon.run, daemon=True)
             tray_thread.start()
         else:
-            print("Cannot start tray thread: tray icon not set up.")
+            self.app_err("Cannot start tray thread: tray icon not set up.")
 
     def hide_window(self):
-        """Hides the main window."""
+        self.app_info("Hide the Ollama Launcher main Window to tray.")
         self.root.withdraw()
         # Optional: Notify pystray (might show a balloon tip, depending on platform)
         if self.tray_icon and self.tray_icon.HAS_NOTIFICATION:
             self.tray_icon.notify("Ollama Launcher hidden to tray.")
 
     def show_window(self):
-        """Shows the main window from hidden state."""
+        self.app_info("Shows the Ollama Launcher main Window from hidden state.")
         self.root.deiconify()
         self.root.lift()        # Bring window to front
         self.root.focus_force() # Force focus
@@ -567,11 +591,13 @@ class OllamaLauncherGUI:
         path = filedialog.askopenfilename(title="Select ollama.exe", filetypes=(("Executable files", "*.exe"), ("All files", "*.*")))
         if path:
             self.vars['ollama_exe_path'].set(path)
+            self.app_info(f"set the ollama_exe_path = '{path}'")
 
     def browse_directory(self, key):
         path = filedialog.askdirectory(title=f"Select Directory for {key}", initialdir=self.vars[key].get() or SCRIPT_DIR)
         if path:
             self.vars[key].set(path)
+            self.app_info(f"set the '{key}' = '{path}'")
 
     def load_settings(self):
         try:
@@ -701,7 +727,7 @@ class OllamaLauncherGUI:
             self.app_err(f"Error reading {pipe_name}: {e}")
         finally:
             pipe.close()                 # Ensure pipe is closed when reading stops
-            self.app_warn(f"{pipe_name} stream closed")
+            self.app_info(f"{pipe_name} stream closed")
 
     def start_ollama(self):
         if self.is_running:
@@ -714,7 +740,6 @@ class OllamaLauncherGUI:
             messagebox.showerror("Error", f"Ollama executable not found at: {ollama_path}\nPlease set the correct path and save settings.")
             self.app_err(f"Ollama executable not found at: {ollama_path}\nPlease set the correct path and save settings.")
             self.status_var.set("Status: Error - Ollama path invalid.")
-            self.app_err("Status: Error - Ollama path invalid.")
             return
 
         ollama_dir = os.path.dirname(ollama_path)
@@ -725,6 +750,8 @@ class OllamaLauncherGUI:
                 is_flag = key in ["OLLAMA_ENABLE_CUDA", "OLLAMA_FLASH_ATTENTION", "OLLAMA_USE_MLOCK"]
                 if value or is_flag:
                     env[key] = value
+
+        env.update(self.user_env) # marge user_env into the environment variables
 
         try:
             self.status_var.set("Status: Starting Ollama...")
@@ -776,6 +803,7 @@ class OllamaLauncherGUI:
         """Waits for process exit and schedules GUI update."""
         exit_code = self.ollama_process.wait()
         # Process finished, schedule GUI update on main thread
+        self.tray_icon.notify(f"Ollama Server stopped with code : {exit_code}\nTime : {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}")
         self.root.after(0, self.update_status_on_exit, exit_code)
 
     def update_status_on_exit(self, exit_code):
@@ -797,7 +825,7 @@ class OllamaLauncherGUI:
             self.start_button.config(state=tk.NORMAL)
             self.stop_button.config(state=tk.DISABLED)
             self.status_var.set("Status: Idle (Ollama was not running).")
-            self.app_info("Status: Idle (Ollama was not running).")
+            self.app_warn("Ollama was not running.")
             return
 
         self.status_var.set("Status: Stopping Ollama...")
@@ -848,17 +876,14 @@ class OllamaLauncherGUI:
             self.app_info("Tray icon stopped.")
 
         if self.is_running:
-            self.app_info("save config...")
-            self.save_settings()
             self.app_info("stop ollama.exe...")
             self.stop_ollama()
             time.sleep(1)
             self.app_info("stop ollama.exe ok")
-            self.root.destroy()
-        else:
-            self.app_info("save config...")
-            self.save_settings()
-            self.root.destroy()
+
+        self.app_info("save config...")
+        self.save_settings()
+        self.root.destroy()
 
     def get_log_content(self) -> str:
         # "1.0" 表示第一行第0个字符 (开始)
