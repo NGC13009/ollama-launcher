@@ -454,7 +454,7 @@ class OllamaLauncherGUI:
         self.app_info("this is a ollama launcher info text demo.")
         self.app_warn("this is a ollama launcher warning text demo.")
         self.app_err("this is a ollama launcher error text demo.")
-        self.app_info_t('system launched.')
+        self.app_time()
         self.app_info("-+++-----------------------------------------------+++-")
 
     # --- Methods (browse_*, load_settings, save_settings are the same) ---
@@ -587,6 +587,7 @@ class OllamaLauncherGUI:
 
     def hide_window(self):
         self.app_info("Hide the Ollama Launcher main Window to tray.")
+        self.app_time()
         self.root.withdraw()
 
         # 我觉得还是算了，不要每次最小化都弹出提示
@@ -595,6 +596,7 @@ class OllamaLauncherGUI:
 
     def show_window(self):
         self.app_info("Shows the Ollama Launcher main Window from hidden state.")
+        self.app_time()
         self.root.deiconify()
         self.root.lift()        # Bring window to front
         self.root.focus_force() # Force focus
@@ -679,7 +681,7 @@ class OllamaLauncherGUI:
             self.start_minimized_var.set(False)
             if hasattr(self, 'start_minimized_check'): # Check if widget exists yet
                 self.start_minimized_check.config(state=tk.DISABLED)
-        self.app_info_t('settings enabled.')
+        self.app_time('settings enabled.')
 
     def save_settings(self):
         current_settings = {'ollama_exe_path': self.vars['ollama_exe_path'].get(), 'variables': {}, 'start_minimized': self.start_minimized_var.get(), "user_env": self.user_env}
@@ -697,14 +699,14 @@ class OllamaLauncherGUI:
             messagebox.showerror("Error", f"Failed to save settings: {e}")
             self.app_err(f"Failed to save settings: {e}")
             self.status_var.set("Status: Error saving settings.")
-        self.app_info_t('settings saved.')
+        self.app_time('settings saved.')
 
     def clear_log(self):
         self.log_widget.config(state=tk.NORMAL)
         self.log_widget.delete('1.0', tk.END)
         self.log_widget.active_codes = {'0'}
         self.log_widget.config(state=tk.DISABLED) # Explicitly set back to DISABLED
-        self.app_info_t()
+        self.app_time()
 
     def copy_log(self):
         log_content = self.log_widget.get('1.0', tk.END)
@@ -715,13 +717,13 @@ class OllamaLauncherGUI:
         except tk.TclError as e:
             messagebox.showerror("Error", f"Error when copy LOG to clipboard: {e}")
             self.app_err(f"Error when copy LOG to clipboard: {e}")
-        self.app_info_t('copy log to clipboard.')
+        self.app_time('copy log to clipboard.')
 
     def update_log(self, message):
         self.log_widget.write_ansi(message)
 
-    def app_info_t(self, text=''):
-        self.log_queue.put('\x1b[94m[app time]\x1b[0m\t' + text + '\t--- ' + self.get_str_time() + '\n')
+    def app_time(self, text=''):
+        self.log_queue.put('\x1b[94m[app time]\t' + self.get_str_time() + '\t--- ' + text + '\x1b[0m\n')
 
     def get_str_time(self):
         text = datetime.now().strftime("%Y - %m - %d \t%H:%M:%S")
@@ -731,10 +733,10 @@ class OllamaLauncherGUI:
         self.log_queue.put('\x1b[92m[app info]\x1b[0m\t' + message + '\n')
 
     def app_warn(self, message):
-        self.log_queue.put('\x1b[93m[app warn]\x1b[0m\t' + message + '\n')
+        self.log_queue.put('\x1b[93m[app warn]\t' + message + '\x1b[0m\n')
 
     def app_err(self, message):
-        self.log_queue.put('\x1b[91m[app err ]\x1b[0m\t' + message + '\n')
+        self.log_queue.put('\x1b[91m[app err ]\t' + message + '\x1b[0m\n')
 
     def process_log_queue(self):
         """Checks the queue for log messages and updates the widget."""
@@ -831,7 +833,7 @@ class OllamaLauncherGUI:
             self.is_running = False
             self.ollama_process = None
             self.start_button.config(state=tk.NORMAL) # Re-enable start button on failure
-        self.app_info_t('ollama server started.')
+        self.app_time('ollama server started.')
 
     def monitor_process_exit(self):
         """Waits for process exit and schedules GUI update."""
@@ -898,13 +900,13 @@ class OllamaLauncherGUI:
             self.ollama_process = None
             self.start_button.config(state=tk.NORMAL)
             self.stop_button.config(state=tk.DISABLED)
-        self.app_info_t('ollama server stoped.')
+        self.app_time('ollama server stoped.')
 
     # hide_window method removed as requested by replacing button
 
     def on_closing(self):
         self.app_info('exit...')
-        self.app_info_t()
+        self.app_time()
         if self.is_running:
             self.app_info("stop ollama.exe...")
             self.stop_ollama()
