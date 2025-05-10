@@ -6,7 +6,7 @@
 #                       打包：在当前conda环境下运行
 #                           ```
 #                           # -w 不要命令行终端， -F打包为单个文件，-i指定图标
-#                           pyinstaller -w .\ollama_launcher.py -i .\favicon.ico
+#                           pyinstaller -w .\ollama_launcher.py -i .\favicon.ico -y
 #                           ```.
 # @attention:       None
 # @TODO:            None
@@ -420,12 +420,18 @@ class OllamaLauncherGUI:
         action_menu = tk.Menu(menubar, tearoff=0)
         action_menu.add_command(label="▶ Ollama Run", command=self.start_ollama)
         action_menu.add_command(label="■ Ollama Stop", command=self.stop_ollama)
-        action_menu.add_separator()
-        action_menu.add_command(label="Save Log", command=self.save_log_to_file)
-        action_menu.add_command(label="Copy Log", command=self.copy_log)
-        action_menu.add_separator()
-        action_menu.add_command(label="Clear Log", command=self.clear_log)
         menubar.add_cascade(label="Action", menu=action_menu)
+
+        # --- log 菜单 ---
+        log_menu = tk.Menu(menubar, tearoff=0)
+        log_menu.add_command(label="Enable wrap", command=lambda: self.log_widget.configure(wrap=tk.WORD))
+        log_menu.add_command(label="Disable wrap", command=lambda: self.log_widget.configure(wrap=tk.NONE))
+        log_menu.add_separator()
+        log_menu.add_command(label="Save Log", command=self.save_log_to_file)
+        log_menu.add_command(label="Copy Log", command=self.copy_log)
+        log_menu.add_separator()
+        log_menu.add_command(label="Clear Log", command=self.clear_log)
+        menubar.add_cascade(label="Log", menu=log_menu)
 
         # --- Help&About 菜单 ---
         help_about_menu = tk.Menu(menubar, tearoff=0)                  # 创建新的菜单对象
@@ -448,7 +454,7 @@ class OllamaLauncherGUI:
         self.app_info("this is a ollama launcher info text demo.")
         self.app_warn("this is a ollama launcher warning text demo.")
         self.app_err("this is a ollama launcher error text demo.")
-        self.log_time()
+        self.app_info_t('system launched.')
         self.app_info("-+++-----------------------------------------------+++-")
 
     # --- Methods (browse_*, load_settings, save_settings are the same) ---
@@ -673,7 +679,7 @@ class OllamaLauncherGUI:
             self.start_minimized_var.set(False)
             if hasattr(self, 'start_minimized_check'): # Check if widget exists yet
                 self.start_minimized_check.config(state=tk.DISABLED)
-        self.log_time()
+        self.app_info_t('settings enabled.')
 
     def save_settings(self):
         current_settings = {'ollama_exe_path': self.vars['ollama_exe_path'].get(), 'variables': {}, 'start_minimized': self.start_minimized_var.get(), "user_env": self.user_env}
@@ -691,32 +697,35 @@ class OllamaLauncherGUI:
             messagebox.showerror("Error", f"Failed to save settings: {e}")
             self.app_err(f"Failed to save settings: {e}")
             self.status_var.set("Status: Error saving settings.")
-        self.log_time()
+        self.app_info_t('settings saved.')
 
     def clear_log(self):
         self.log_widget.config(state=tk.NORMAL)
         self.log_widget.delete('1.0', tk.END)
         self.log_widget.active_codes = {'0'}
         self.log_widget.config(state=tk.DISABLED) # Explicitly set back to DISABLED
-        self.log_time()
+        self.app_info_t()
 
     def copy_log(self):
         log_content = self.log_widget.get('1.0', tk.END)
 
         try:
             self.root.clipboard_append(log_content)
-            self.app_info("copy log to clipboard.")
 
         except tk.TclError as e:
             messagebox.showerror("Error", f"Error when copy LOG to clipboard: {e}")
             self.app_err(f"Error when copy LOG to clipboard: {e}")
-        self.log_time()
+        self.app_info_t('copy log to clipboard.')
 
     def update_log(self, message):
         self.log_widget.write_ansi(message)
 
-    def log_time(self):
-        self.log_queue.put(datetime.now().strftime("\x1b[94m[app time]\x1b[0m\t%Y - %m - %d \t%H:%M:%S\n"))
+    def app_info_t(self, text=''):
+        self.log_queue.put('\x1b[94m[app time]\x1b[0m\t' + text + '\t--- ' + self.get_str_time() + '\n')
+
+    def get_str_time(self):
+        text = datetime.now().strftime("%Y - %m - %d \t%H:%M:%S")
+        return text
 
     def app_info(self, message):
         self.log_queue.put('\x1b[92m[app info]\x1b[0m\t' + message + '\n')
@@ -822,7 +831,7 @@ class OllamaLauncherGUI:
             self.is_running = False
             self.ollama_process = None
             self.start_button.config(state=tk.NORMAL) # Re-enable start button on failure
-        self.log_time()
+        self.app_info_t('ollama server started.')
 
     def monitor_process_exit(self):
         """Waits for process exit and schedules GUI update."""
@@ -889,14 +898,13 @@ class OllamaLauncherGUI:
             self.ollama_process = None
             self.start_button.config(state=tk.NORMAL)
             self.stop_button.config(state=tk.DISABLED)
-        self.log_time()
+        self.app_info_t('ollama server stoped.')
 
     # hide_window method removed as requested by replacing button
 
     def on_closing(self):
-        self.app_info("exit...")
-        self.log_time()
-
+        self.app_info('exit...')
+        self.app_info_t()
         if self.is_running:
             self.app_info("stop ollama.exe...")
             self.stop_ollama()

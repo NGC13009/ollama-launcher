@@ -164,4 +164,7 @@ GitHub Project Homepage: https://github.com/NGC13009/ollama-launcher.git (this p
 17. [o]检查操作日志是否存在打印？
 18. [o]托盘按钮
 19. [o]自定义环境变量
+20. [o]一些日志最好把时间戳加上
+21. []ollama服务的颜色怎么显示？
+22. [o]自动换行
 
