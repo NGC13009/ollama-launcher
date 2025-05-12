@@ -6,7 +6,7 @@
 #                       打包：在当前conda环境下运行
 #                           ```
 #                           # -w 不要命令行终端， -F打包为单个文件，-i指定图标
-#                           pyinstaller -w .\ollama_launcher.py -i .\favicon.ico
+#                           pyinstaller -w .\ollama_launcher.py -i .\favicon.ico -y
 #                           ```.
 # @attention:       None
 # @TODO:            None
@@ -55,7 +55,7 @@ DEFAULT_SETTINGS = {
         "OLLAMA_MAX_QUEUE": "512",
         "OLLAMA_NUM_PARALLEL": "1",
         "OLLAMA_ENABLE_CUDA": "1",
-        "CUDA_VISIBLE_DEVICES": "0,1",
+        "CUDA_VISIBLE_DEVICES": "0",
         "OLLAMA_FLASH_ATTENTION": "1",
         "OLLAMA_USE_MLOCK": "1",
         "OLLAMA_MULTIUSER_CACHE": "0",
@@ -228,6 +228,16 @@ class AnsiColorText(tk.Text):
 
 class OllamaLauncherGUI:
 
+    BG_GREEN = "\x1b[42m"
+    BG_YELLOW = "\x1b[43m"
+    BG_RED = "\x1b[41m"
+    BG_BLUE = "\x1b[44m"
+    BG_CYAN = "\x1b[46m"
+    BG_MAGENTA = "\x1b[45m"
+    BG_WHITE = "\x1b[47m"
+    BG_DEFAULT = "\x1b[49m"
+    RESET = "\x1b[0m"
+
     def __init__(self, root: tk.Tk):
         global has_pystray # Ensure global is accessible
         self.user_env = dict()
@@ -309,25 +319,24 @@ class OllamaLauncherGUI:
         row_num = 0
         for key, default_value in DEFAULT_SETTINGS["variables"].items():
             ttk.Label(env_frame, text=f"{key}:").grid(row=row_num, column=0, sticky=tk.W, padx=5, pady=2)
-            if key in ["OLLAMA_ENABLE_CUDA", "OLLAMA_FLASH_ATTENTION", "OLLAMA_USE_MLOCK", "OLLAMA_DEBUG", "OLLAMA_MULTIUSER_CACHE", "OLLAMA_INTEL_GPU", "OLLAMA_DEBUG"]: # Added OLLAMA_DEBUG
+            if key in ["OLLAMA_ENABLE_CUDA", "OLLAMA_FLASH_ATTENTION", "OLLAMA_USE_MLOCK", "OLLAMA_DEBUG", "OLLAMA_MULTIUSER_CACHE", "OLLAMA_INTEL_GPU"]: # 是 bool
                 try:
                     init_val = int(default_value)
                 except (ValueError, TypeError):
-                    init_val = 0                                                                                                                                          # Default to 0 if conversion fails
+                    init_val = 0
                 self.vars[key] = tk.IntVar(value=init_val)
-                ttk.Checkbutton(env_frame, variable=self.vars[key]).grid(row=row_num, column=1, columnspan=2, sticky=tk.W, padx=5, pady=2)                                # Span needed for alignment
-            elif key in ["OLLAMA_MODELS", "OLLAMA_TMPDIR", "OLLAMA_CONTEXT_LENGTH"]:
+                ttk.Checkbutton(env_frame, variable=self.vars[key]).grid(row=row_num, column=1, columnspan=2, sticky=tk.W, padx=5, pady=2)
+            elif key in ["OLLAMA_MODELS", "OLLAMA_TMPDIR"]:                                                                                               # 需要配置路径的
                 self.vars[key] = tk.StringVar(value=default_value)
                 entry_frame = ttk.Frame(env_frame)
-                                                                                                                                                                          # Span 2 columns within env_frame grid
+
                 entry_frame.grid(row=row_num, column=1, columnspan=2, sticky=(tk.W, tk.E))
                 entry_frame.columnconfigure(0, weight=1)
-                                                                                                                                                                          # Reduced width slightly
+
                 ttk.Entry(entry_frame, textvariable=self.vars[key], width=30).grid(row=0, column=0, sticky=(tk.W, tk.E), padx=(5, 0))
                 ttk.Button(entry_frame, text="/", command=lambda k=key: self.browse_directory(k), width=2).grid(row=0, column=1, padx=5)
-            else:
+            else:  # 其他就正常文本框
                 self.vars[key] = tk.StringVar(value=default_value)
-                                                                                                                                                                          # Reduced width slightly, span 2 cols within env_frame grid
                 ttk.Entry(env_frame, textvariable=self.vars[key], width=30).grid(row=row_num, column=1, columnspan=2, sticky=(tk.W, tk.E), padx=5, pady=2)
             row_num += 1
 
@@ -421,12 +430,18 @@ class OllamaLauncherGUI:
         action_menu = tk.Menu(menubar, tearoff=0)
         action_menu.add_command(label="▶ Ollama Run", command=self.start_ollama)
         action_menu.add_command(label="■ Ollama Stop", command=self.stop_ollama)
-        action_menu.add_separator()
-        action_menu.add_command(label="Save Log", command=self.save_log_to_file)
-        action_menu.add_command(label="Copy Log", command=self.copy_log)
-        action_menu.add_separator()
-        action_menu.add_command(label="Clear Log", command=self.clear_log)
         menubar.add_cascade(label="Action", menu=action_menu)
+
+        # --- log 菜单 ---
+        log_menu = tk.Menu(menubar, tearoff=0)
+        log_menu.add_command(label="Enable wrap", command=lambda: self.log_widget.configure(wrap=tk.WORD))
+        log_menu.add_command(label="Disable wrap", command=lambda: self.log_widget.configure(wrap=tk.NONE))
+        log_menu.add_separator()
+        log_menu.add_command(label="Save Log", command=self.save_log_to_file)
+        log_menu.add_command(label="Copy Log", command=self.copy_log)
+        log_menu.add_separator()
+        log_menu.add_command(label="Clear Log", command=self.clear_log)
+        menubar.add_cascade(label="Log", menu=log_menu)
 
         # --- Help&About 菜单 ---
         help_about_menu = tk.Menu(menubar, tearoff=0)                  # 创建新的菜单对象
@@ -449,7 +464,7 @@ class OllamaLauncherGUI:
         self.app_info("this is a ollama launcher info text demo.")
         self.app_warn("this is a ollama launcher warning text demo.")
         self.app_err("this is a ollama launcher error text demo.")
-        self.log_time()
+        self.app_time()
         self.app_info("-+++-----------------------------------------------+++-")
 
     # --- Methods (browse_*, load_settings, save_settings are the same) ---
@@ -582,6 +597,7 @@ class OllamaLauncherGUI:
 
     def hide_window(self):
         self.app_info("Hide the Ollama Launcher main Window to tray.")
+        self.app_time()
         self.root.withdraw()
 
         # 我觉得还是算了，不要每次最小化都弹出提示
@@ -590,6 +606,7 @@ class OllamaLauncherGUI:
 
     def show_window(self):
         self.app_info("Shows the Ollama Launcher main Window from hidden state.")
+        self.app_time()
         self.root.deiconify()
         self.root.lift()        # Bring window to front
         self.root.focus_force() # Force focus
@@ -674,7 +691,7 @@ class OllamaLauncherGUI:
             self.start_minimized_var.set(False)
             if hasattr(self, 'start_minimized_check'): # Check if widget exists yet
                 self.start_minimized_check.config(state=tk.DISABLED)
-        self.log_time()
+        self.app_time('settings enabled.')
 
     def save_settings(self):
         current_settings = {'ollama_exe_path': self.vars['ollama_exe_path'].get(), 'variables': {}, 'start_minimized': self.start_minimized_var.get(), "user_env": self.user_env}
@@ -692,41 +709,46 @@ class OllamaLauncherGUI:
             messagebox.showerror("Error", f"Failed to save settings: {e}")
             self.app_err(f"Failed to save settings: {e}")
             self.status_var.set("Status: Error saving settings.")
-        self.log_time()
+        self.app_time('settings saved.')
 
     def clear_log(self):
         self.log_widget.config(state=tk.NORMAL)
         self.log_widget.delete('1.0', tk.END)
         self.log_widget.active_codes = {'0'}
         self.log_widget.config(state=tk.DISABLED) # Explicitly set back to DISABLED
-        self.log_time()
+        self.app_time()
 
     def copy_log(self):
         log_content = self.log_widget.get('1.0', tk.END)
 
         try:
             self.root.clipboard_append(log_content)
-            self.app_info("copy log to clipboard.")
 
         except tk.TclError as e:
             messagebox.showerror("Error", f"Error when copy LOG to clipboard: {e}")
             self.app_err(f"Error when copy LOG to clipboard: {e}")
-        self.log_time()
+        self.app_time('copy log to clipboard.')
 
     def update_log(self, message):
+        message = self.colorize_gin_log(message)
         self.log_widget.write_ansi(message)
+        print(message, end='', flush=True)
 
-    def log_time(self):
-        self.log_queue.put(datetime.now().strftime("\x1b[94m[app time]\x1b[0m\t%Y - %m - %d \t%H:%M:%S\n"))
+    def app_time(self, text=''):
+        self.log_queue.put('\x1b[94m[app time]\t' + self.get_str_time() + '\t--- ' + text + '\x1b[0m\n')
+
+    def get_str_time(self):
+        text = datetime.now().strftime("%Y - %m - %d \t%H:%M:%S")
+        return text
 
     def app_info(self, message):
         self.log_queue.put('\x1b[92m[app info]\x1b[0m\t' + message + '\n')
 
     def app_warn(self, message):
-        self.log_queue.put('\x1b[93m[app warn]\x1b[0m\t' + message + '\n')
+        self.log_queue.put('\x1b[93m[app warn]\t' + message + '\x1b[0m\n')
 
     def app_err(self, message):
-        self.log_queue.put('\x1b[91m[app err ]\x1b[0m\t' + message + '\n')
+        self.log_queue.put('\x1b[91m[app  err]\t' + message + '\x1b[0m\n')
 
     def process_log_queue(self):
         """Checks the queue for log messages and updates the widget."""
@@ -777,13 +799,15 @@ class OllamaLauncherGUI:
 
         env.update(self.user_env) # marge user_env into the environment variables
 
+        self.app_info(f"ENV: {env}")
+        self.app_info(f"ollama_dir: {ollama_dir}")
+
         try:
             self.status_var.set("Status: Starting Ollama...")
             self.update_log("\n\n")
             self.app_info("Starting Ollama Server...")
             self.root.update_idletasks()
 
-            # --- CRITICAL CHANGES for redirecting output ---
             self.ollama_process = subprocess.Popen(
                 [ollama_path, "serve"],
                 env=env,
@@ -795,8 +819,7 @@ class OllamaLauncherGUI:
                 errors='replace',                   # Handle potential decoding errors
                 bufsize=1,                          # Line buffered
                                                     # Keep CREATE_NO_WINDOW if you don't want the console popping up
-                creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0)
-                                                    # --- END CRITICAL CHANGES ---
+                creationflags=subprocess.CREATE_NO_WINDOW)
 
             self.is_running = True
             self.status_var.set(f"Status: Ollama server running (PID: {self.ollama_process.pid})")
@@ -823,7 +846,7 @@ class OllamaLauncherGUI:
             self.is_running = False
             self.ollama_process = None
             self.start_button.config(state=tk.NORMAL) # Re-enable start button on failure
-        self.log_time()
+        self.app_time('ollama server started.')
 
     def monitor_process_exit(self):
         """Waits for process exit and schedules GUI update."""
@@ -890,14 +913,13 @@ class OllamaLauncherGUI:
             self.ollama_process = None
             self.start_button.config(state=tk.NORMAL)
             self.stop_button.config(state=tk.DISABLED)
-        self.log_time()
+        self.app_time('ollama server stoped.')
 
     # hide_window method removed as requested by replacing button
 
     def on_closing(self):
-        self.app_info("exit...")
-        self.log_time()
-
+        self.app_info('exit...')
+        self.app_time()
         if self.is_running:
             self.app_info("stop ollama.exe...")
             self.stop_ollama()
@@ -1095,10 +1117,91 @@ class OllamaLauncherGUI:
         self.root.wait_window(editor_window) # Wait until the editor window is closed
         self.app_info(f"Updated self.user_env: {self.user_env}")
 
+    def get_status_color(self, status_code_str):
+        """根据 HTTP 状态码字符串返回合适的 ANSI 背景色代码。"""
+        # (此函数保持不变)
+        try:
+            code = int(status_code_str)
+            if 100 <= code < 200: return self.BG_BLUE
+            elif 200 <= code < 300: return self.BG_GREEN
+            elif 300 <= code < 400: return self.BG_CYAN
+            elif 400 <= code < 500: return self.BG_YELLOW
+            elif 500 <= code < 600: return self.BG_RED
+            else: return self.BG_WHITE
+        except ValueError:
+            return self.BG_WHITE
+
+    def get_method_color(self, method_str):
+        """根据 HTTP 方法字符串返回合适的 ANSI 背景色代码。"""
+        colors = {
+            "GET": self.BG_BLUE,
+            "POST": self.BG_GREEN,
+            "PUT": self.BG_YELLOW,
+            "DELETE": self.BG_RED,
+            "PATCH": self.BG_MAGENTA,
+            "HEAD": self.BG_CYAN,
+            "OPTIONS": self.BG_WHITE,
+        }
+        return colors.get(method_str, self.BG_WHITE)
+
+    def colorize_gin_log(self, log_line):
+        """
+        接收一个字符串（可能是 Gin 日志行），如果包含 "[GIN]"，
+        则对 HTTP 状态码和方法及其周围空格应用 ANSI 背景色 (不包括 '|' 符号)。
+
+        参数:
+            log_line (str): 输入的日志字符串。
+
+        返回:
+            str: 带有 ANSI 颜色代码的字符串，或者如果输入不含 "[GIN]" 则返回原字符串。
+        """
+        if "[GIN]" not in log_line:
+            return log_line
+
+        colored_line = log_line
+
+        # 1. 查找并着色状态码字段 (空格 + 数字 + 空格)
+        # 使用原正则表达式分离各部分
+        status_pattern_original = r'(\|\s*)(\d{3})(\s*\|)'
+
+        def replace_status_modified(match):
+            pipe_and_leading_spaces = match.group(1)  # 例: "|  "
+            status_code = match.group(2)              # 例: "200"
+            trailing_spaces_and_pipe = match.group(3) # 例: "  |"
+
+            leading_spaces = pipe_and_leading_spaces[1:]    # 提取第一个'|'后面的空格
+            trailing_spaces = trailing_spaces_and_pipe[:-1] # 提取最后一个'|'前面的空格
+
+            color = self.get_status_color(status_code)
+
+            # 构造替换字符串: 第一个'|' + 颜色开始 + 前导空格 + 状态码 + 尾随空格 + 颜色重置 + 第二个'|'
+            return f"|{color}{leading_spaces}{status_code}{trailing_spaces}{self.RESET}|"
+
+        colored_line = re.sub(status_pattern_original, replace_status_modified, colored_line)
+
+        # 2. 查找并着色 HTTP 方法字段 (空格 + 方法 + 空格)
+        method_pattern_original = r'(\|\s*)(\b(?:GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)\b)(\s+)'
+
+        def replace_method_modified(match):
+            pipe_and_leading_spaces = match.group(1) # 例: "| "
+            method = match.group(2)                  # 例: "GET"
+            trailing_spaces = match.group(3)         # 例: "      "
+
+            leading_spaces = pipe_and_leading_spaces[1:] # 提取第一个'|'后面的空格
+
+            color = self.get_method_color(method)
+
+            # 构造替换字符串: 第一个'|' + 颜色开始 + 前导空格 + 方法 + 尾随空格 + 颜色重置
+            return f"|{color}{leading_spaces}{method}{trailing_spaces}{self.RESET}"
+
+        colored_line = re.sub(method_pattern_original, replace_method_modified, colored_line)
+
+        return colored_line
+
 
 if __name__ == "__main__":
-    print('run')
+    print('[info] run')
     root = tk.Tk()
     app = OllamaLauncherGUI(root)
     root.mainloop()
-    print('ok')
+    print('[info] ok')

@@ -40,6 +40,7 @@ int main(int argc, char *argv[])
 
     int count = 0;
     printf("[test] very long line, long long long long long long long long long long long long long long long long long long long long long long long long long long long long long long long long long long long long long long long long long long long long long long long long \n");
+    printf("[test color] \x1b[91m[app err ]\t + message + \x1b[0m\n");
     while (1)
     {
         // 显示点什么出去...
