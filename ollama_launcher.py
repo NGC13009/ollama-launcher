@@ -29,8 +29,15 @@ import webbrowser
 import threading
 from datetime import datetime
 import base64
-import io     # 需要 io.BytesIO
+import io                   # 需要 io.BytesIO
 from PIL import Image, ImageTk
+import requests
+from urllib.parse import urlparse, urlencode
+from pathlib import Path
+from typing import Optional # 导入 Optional 用于类型提示
+from typing import Optional, Callable
+import platform
+import binascii
 
 from OL_resource import HELP_TEXT, VERSION, DATE, WELCONE_TEXT, icon_base64_data, INFO_TEXT, GITLINK, GITLINK_BOTTOM
 
@@ -238,6 +245,13 @@ class OllamaLauncherGUI:
     BG_DEFAULT = "\x1b[49m"
     RESET = "\x1b[0m"
 
+    # Ollama 更新检查 API 地址
+    UPDATE_CHECK_URL_BASE = "https://ollama.com/api/update"
+    # GitHub Release 下载 URL 模板
+    GITHUB_DOWNLOAD_URL_TEMPLATE = "https://github.com/ollama/ollama/releases/download/{version_tag}/{filename}"
+    OLLAMA_WEBPAGE = "https://ollama.com/"
+    OLLAMA_MODEL_LIST = "https://ollama.com/search"
+
     def __init__(self, root: tk.Tk):
         global has_pystray # Ensure global is accessible
         self.user_env = dict()
@@ -444,10 +458,16 @@ class OllamaLauncherGUI:
         menubar.add_cascade(label="Log", menu=log_menu)
 
         # --- Help&About 菜单 ---
-        help_about_menu = tk.Menu(menubar, tearoff=0)                  # 创建新的菜单对象
-        help_about_menu.add_command(label="Help", command=self.help)   # 添加 Help 命令
-        help_about_menu.add_command(label="About", command=self.about) # 添加 About 命令
-        menubar.add_cascade(label="Info", menu=help_about_menu)        # 添加 Help&About 级联菜单
+        help_about_menu = tk.Menu(menubar, tearoff=0)
+        help_about_menu.add_command(label="Ollama webpage", command=self.ollama_webpage)
+        help_about_menu.add_command(label="Ollama model list", command=self.ollama_model_list)
+        help_about_menu.add_command(label="Download Ollama", command=self.get_update_url_msgbox)
+        help_about_menu.add_separator()
+        help_about_menu.add_command(label="System info", command=self.get_platform_details_msgbox)
+        help_about_menu.add_separator()
+        help_about_menu.add_command(label="Help", command=self.help)
+        help_about_menu.add_command(label="About", command=self.about)
+        menubar.add_cascade(label="Info", menu=help_about_menu)
 
         root.config(menu=menubar) # 将修改后的菜单栏配置给主窗口
 
@@ -490,8 +510,18 @@ class OllamaLauncherGUI:
         text_area.pack(padx=10, pady=10, expand=True, fill=tk.BOTH)
         text_area.insert(tk.END, HELP_TEXT)
         text_area.config(state=tk.DISABLED) # 禁止用户编辑
-        close_button = ttk.Button(help_window, text="X", command=help_window.destroy)
-        close_button.pack(pady=5)
+
+        style = ttk.Style()
+        style.configure("HelpButtonFrame.TFrame", background=bg_color)
+        button_frame = ttk.Frame(help_window, style="HelpButtonFrame.TFrame")
+        button_frame.pack(pady=10)
+        copy_help = ttk.Button(button_frame, text="copy document to clip board", command=self.copy_help)
+        copy_help.pack(side=tk.LEFT, padx=5)
+        ok_button = ttk.Button(button_frame, text="better help document in webpage", command=self.open_git_webpage)
+        ok_button.pack(side=tk.LEFT, padx=5)
+        close_button = ttk.Button(button_frame, text="X", command=help_window.destroy)
+        close_button.pack(side=tk.LEFT, padx=5)
+
         help_window.update_idletasks()
         width = help_window.winfo_width()
         height = help_window.winfo_height()
@@ -530,12 +560,9 @@ class OllamaLauncherGUI:
         label = ttk.Label(container, text=INFO_TEXT, justify="center", style="About.TLabel")
         label.pack(pady=10)
 
-        def open_github_link():
-            webbrowser.open_new(GITLINK)
-
         style = ttk.Style()
         style.configure("About.TButton")
-        github_button = ttk.Button(container, text=GITLINK_BOTTOM, style="About.TButton", command=open_github_link)
+        github_button = ttk.Button(container, text=GITLINK_BOTTOM, style="About.TButton", command=self.open_git_webpage)
         github_button.pack()
 
     def setup_tray_icon(self):
@@ -596,8 +623,7 @@ class OllamaLauncherGUI:
             self.app_err("Cannot start tray thread: tray icon not set up.")
 
     def hide_window(self):
-        self.app_info("Hide the Ollama Launcher main Window to tray.")
-        self.app_time()
+        self.app_time("Hide the Ollama Launcher main Window to tray.")
         self.root.withdraw()
 
         # 我觉得还是算了，不要每次最小化都弹出提示
@@ -605,8 +631,7 @@ class OllamaLauncherGUI:
         #     self.tray_icon.notify("Ollama Launcher hidden to tray.")
 
     def show_window(self):
-        self.app_info("Shows the Ollama Launcher main Window from hidden state.")
-        self.app_time()
+        self.app_time("Shows the Ollama Launcher main Window from hidden state.")
         self.root.deiconify()
         self.root.lift()        # Bring window to front
         self.root.focus_force() # Force focus
@@ -728,6 +753,17 @@ class OllamaLauncherGUI:
             messagebox.showerror("Error", f"Error when copy LOG to clipboard: {e}")
             self.app_err(f"Error when copy LOG to clipboard: {e}")
         self.app_time('copy log to clipboard.')
+
+    def copy_help(self):
+
+        try:
+            self.root.clipboard_append(HELP_TEXT)
+            self.app_time('copy help document to clipboard.')
+            messagebox.showinfo("Note", "Copy help document to clipboard success.")
+
+        except tk.TclError as e:
+            messagebox.showerror("Error", f"Error when copy help document to clipboard: {e}")
+            self.app_err(f"Error when copy help document to clipboard: {e}")
 
     def update_log(self, message):
         message = self.colorize_gin_log(message)
@@ -1197,6 +1233,164 @@ class OllamaLauncherGUI:
         colored_line = re.sub(method_pattern_original, replace_method_modified, colored_line)
 
         return colored_line
+
+    def open_git_webpage(self):
+        webbrowser.open_new(GITLINK)
+        self.app_info("open webpage of ollama-launcher")
+
+    def get_platform_details(self):
+        system = platform.system().lower()
+        arch = platform.machine().lower()
+
+        # --- 架构映射 (根据 Go runtime 常量调整) ---
+        arch_map = {
+            'x86_64': 'amd64',
+            'amd64': 'amd64',
+            'arm64': 'arm64',
+            'aarch64': 'arm64',
+        }
+        mapped_arch = arch_map.get(arch, arch)
+
+        # --- 操作系统映射 ---
+        os_map = {
+            'darwin': 'darwin',   # macOS
+            'linux': 'linux',
+            'windows': 'windows',
+        }
+        mapped_os = os_map.get(system, system)
+        self.app_info(f"system platfrom: os={mapped_os}, arch={mapped_arch}")
+        return {"os": mapped_os, "arch": mapped_arch}
+
+    def get_platform_details_msgbox(self):
+        a = self.get_platform_details()
+        messagebox.showinfo("Note",f"system platfrom: os={a["os"]}, arch={a["arch"]}")
+        
+    def get_ollama_platform_archive_url(self, current_version="0.0.0") -> Optional[str]:
+        self.app_info(f"UPDATE_CHECK_URL_BASE: {self.UPDATE_CHECK_URL_BASE}")
+        platform_info = self.get_platform_details()
+        os_name = platform_info["os"]
+        arch_name = platform_info["arch"]
+
+        query_params = {
+            "os": os_name,
+            "arch": arch_name,
+            "version": current_version,
+            "ts": int(time.time()),
+            "nonce": binascii.hexlify(os.urandom(16)).decode('utf-8'),
+        }
+
+        request_url = f"{self.UPDATE_CHECK_URL_BASE}?{urlencode(query_params)}"
+        self.app_info(f"Ollama API: {request_url}")
+
+        headers = {
+            "User-Agent": f"python-ollama-checker/0.2 ({arch_name} {os_name}) Python/{platform.python_version()}",
+        }
+        self.app_info(f"Headers: {headers}")
+
+        try:
+            response = requests.get(request_url, headers=headers, timeout=15)
+
+            if response.status_code == 204:
+                self.app_info("Check update: This is the latest version. Don't need to update.")
+                return None
+            elif response.status_code == 200:
+                self.app_info("url GET 200 OK")
+                try:
+                    update_data = response.json()
+                    initial_url = update_data.get("url")
+
+                    if not initial_url:
+                        self.app_warn("The update respone lost value: URL. Update terminate.")
+                        return None
+                    self.app_info(f"API return URL: {initial_url}")
+
+                    # --- 第二步：从 initial_url 提取版本标签 ---
+                    version_tag = None
+                    try:
+                        path_parts = Path(urlparse(initial_url).path).parts
+                        # 查找路径中 'vX.Y.Z' 格式的部分
+                        for part in path_parts:
+                            if part.startswith('v') and '.' in part and part.count('.') >= 2:
+                                # 基本检查，确保至少有两个点
+                                is_version = True
+                                # 检查 v 后面的部分是否主要是数字和点
+                                for char in part[1:]:
+                                    if not (char.isdigit() or char == '.'):
+                                        is_version = False
+                                        break
+                                if is_version:
+                                    version_tag = part
+                                    self.app_info(f"The version tag: {version_tag}")
+                                    break
+                        if not version_tag:
+                            self.app_err("Can not get a valid version tag. Update terminate.")
+                            return None
+                    except Exception as e:
+                        self.app_err(f"Error parsing URL to extract version tag: {e}. Update terminate.")
+                        return None
+
+                    # --- 第三步：根据平台确定目标文件名 ---
+                    target_filename = None
+                    if os_name == "windows":
+                        target_filename = f"ollama-windows-{arch_name}.zip"
+                    elif os_name == "linux":
+                        # 根据用户提供的列表，Linux 使用 .tgz
+                        target_filename = f"ollama-linux-{arch_name}.tgz"
+                    elif os_name == "darwin":
+                        # 根据用户提供的列表，macOS 使用统一的 .zip 文件名
+                        target_filename = "Ollama-darwin.zip"
+                    else:
+                        self.app_err(f"Unsupported operating system for building file names: {os_name}. Update terminate.")
+                        return None
+
+                    if not target_filename:
+                        self.app_err("Failed to determine the target file name. Update terminate.")
+                        return None
+                    self.app_info(f"Based on the target file name determined by the platform: {target_filename}")
+
+                    # --- 第四步：构建最终的 GitHub 下载 URL ---
+                    final_download_url = self.GITHUB_DOWNLOAD_URL_TEMPLATE.format(version_tag=version_tag, filename=target_filename)
+                    self.app_info(f"Final download URL: {final_download_url}")
+                    return final_download_url # 返回构建好的 URL 字符串
+
+                except requests.exceptions.JSONDecodeError:
+                    self.app_err("Unable to parse the JSON content of the server response. Update terminate.")
+                    return None
+                except Exception as e:
+                    self.app_err(f"Unknown error occurred while processing update response or building URL: {e}. Update terminate.")
+                    return None
+
+            elif response.status_code in [401, 403]:
+                self.app_err(f"API fault with code: {response.status_code}.")
+                self.app_err(f"respond: {response.text[:500]}... Update terminate.")
+                return None
+            else:
+                self.app_warn(f"API fault with code: {response.status_code}")
+                self.app_warn(f"respond: {response.text[:500]}... Update terminate.")
+                return None
+
+        except requests.exceptions.RequestException as e:
+            self.app_err(f"Net error: {e}. Update terminate.")
+            return None
+        except Exception as e:
+            self.app_err(f"Unknow error: {e}. Update terminate.")
+            return None
+
+    def get_update_url_msgbox(self):
+        url = self.get_ollama_platform_archive_url()
+        if messagebox.askyesno("Ollama update", f"Get the download URL of the latest ollama version. Would you want to open web browser to download it?\nURL: {url}"):
+            self.app_info("Ollama update: open the URL in web browser.")
+            webbrowser.open_new(url)
+        else:
+            self.app_info("Ollama update: cancel open the download URL.")
+
+    def ollama_webpage(self):
+        webbrowser.open_new(self.OLLAMA_WEBPAGE)
+        self.app_info("open webpage of OLLAMA_WEBPAGE")
+
+    def ollama_model_list(self):
+        webbrowser.open_new(self.OLLAMA_MODEL_LIST)
+        self.app_info("open webpage of OLLAMA_MODEL_LIST")
 
 
 if __name__ == "__main__":
