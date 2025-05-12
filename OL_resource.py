@@ -15,7 +15,7 @@ VERSION = "v1.0"
 DATE = "2025Y5M4D"
 
 # 欢迎标语 : 彩色的
-WELCONE_TEXT = f"\n\n\t\tOllama Launcher {VERSION} @ {DATE}\n\n\t\t\t\tWelcome!\n\n\t\t\t\x1b[40m  \x1b[0m \x1b[47m  \x1b[0m \x1b[44m  \x1b[0m \x1b[43m  \x1b[0m \x1b[41m  \x1b[0m \x1b[46m  \x1b[0m \x1b[42m  \x1b[0m \x1b[45m  \x1b[0m \x1b[49m  \x1b[0m\n\n\tHow to use: See Help & About information in the 'Info'\n\ttab of the menu bar.\n\n"
+WELCONE_TEXT = f"\n\n\t\t    Ollama Launcher {VERSION} @ {DATE}\n\n\t\t\t\tWelcome!\n\n\t\t\t\x1b[40m  \x1b[0m \x1b[47m  \x1b[0m \x1b[44m  \x1b[0m \x1b[43m  \x1b[0m \x1b[41m  \x1b[0m \x1b[46m  \x1b[0m \x1b[42m  \x1b[0m \x1b[45m  \x1b[0m \x1b[49m  \x1b[0m\n\n\tHow to use: See Help & About information in the 'Info'\n\ttab of the menu bar.\n\n"
 
 # 关于页的提示文本
 INFO_TEXT = f"""Ollama Launcher\n\nversion: {VERSION}\nupdate: {DATE}\nlicense: GPLv3\n- NGC13009 -"""
