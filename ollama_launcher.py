@@ -464,6 +464,7 @@ class OllamaLauncherGUI:
         help_about_menu.add_command(label="Download Ollama", command=self.get_update_url_msgbox)
         help_about_menu.add_separator()
         help_about_menu.add_command(label="System info", command=self.get_platform_details_msgbox)
+        help_about_menu.add_command(label="Ollama version", command=self.get_ollama_version_msgbox)
         help_about_menu.add_separator()
         help_about_menu.add_command(label="Help", command=self.help)
         help_about_menu.add_command(label="About", command=self.about)
@@ -957,17 +958,30 @@ class OllamaLauncherGUI:
         self.app_info('exit...')
         self.app_time()
         if self.is_running:
-            self.app_info("stop ollama.exe...")
-            self.stop_ollama()
+            result = messagebox.askyesnocancel(
+                    "Note", 
+                    "Do you really want to EXIT?", 
+                    detail="Ollama server is running.\nIf you want to stop ollama deamon & exit, choose Yes.\nIf you want to hidden the window to tray, choose NO.", 
+                    icon=messagebox.WARNING, 
+                    default=messagebox.CANCEL
+                )
+            if result == True:
+                self.app_info("stop ollama.exe...")
+                self.stop_ollama()
 
-            if self.tray_icon:
-                self.app_info("stop tray icon...")
-                self.root.after(950, self.tray_icon.stop) # 必须小于self.root.destroy()的触发时间
+                if self.tray_icon:
+                    self.app_info("stop tray icon...")
+                    self.root.after(950, self.tray_icon.stop) # 必须小于self.root.destroy()的触发时间
 
-            self.app_info("save config...")
-            self.save_settings()
-            self.app_warn("OK. Will exit after 1 second...")
-            self.root.after(1000, self.root.destroy)
+                self.app_info("save config...")
+                self.save_settings()
+                self.app_warn("OK. Will exit after 1 second...")
+                self.root.after(1000, self.root.destroy)
+            elif result == False:
+                self.hide_window()
+                return
+            else: # return None
+                return
 
         else:
             if self.tray_icon:
@@ -1263,7 +1277,8 @@ class OllamaLauncherGUI:
 
     def get_platform_details_msgbox(self):
         a = self.get_platform_details()
-        messagebox.showinfo("Note",f"system platfrom: os={a["os"]}, arch={a["arch"]}")
+        ollama_version = self.get_ollama_version()
+        messagebox.showinfo("System platfrom",f"os={a["os"]}\narch={a["arch"]}\nollama={ollama_version}")
         
     def get_ollama_platform_archive_url(self, current_version="0.0.0") -> Optional[str]:
         self.app_info(f"UPDATE_CHECK_URL_BASE: {self.UPDATE_CHECK_URL_BASE}")
@@ -1351,7 +1366,7 @@ class OllamaLauncherGUI:
                     # --- 第四步：构建最终的 GitHub 下载 URL ---
                     final_download_url = self.GITHUB_DOWNLOAD_URL_TEMPLATE.format(version_tag=version_tag, filename=target_filename)
                     self.app_info(f"Final download URL: {final_download_url}")
-                    return final_download_url # 返回构建好的 URL 字符串
+                    return (final_download_url,version_tag) # 返回构建好的 URL 字符串
 
                 except requests.exceptions.JSONDecodeError:
                     self.app_err("Unable to parse the JSON content of the server response. Update terminate.")
@@ -1377,8 +1392,14 @@ class OllamaLauncherGUI:
             return None
 
     def get_update_url_msgbox(self):
-        url = self.get_ollama_platform_archive_url()
-        if messagebox.askyesno("Ollama update", f"Get the download URL of the latest ollama version. Would you want to open web browser to download it?\nURL: {url}"):
+        ret = self.get_ollama_platform_archive_url()
+        if ret is None:
+            self.app_err("Error occurred while processing update response or building URL. Update terminate.")
+            return
+        url,version_tag = ret
+        ollama_version = self.get_ollama_version()
+        
+        if messagebox.askyesno("Ollama download", f"The latest ollama version is {version_tag}. \nCurrent Version is {ollama_version}.\nWould you want to open web browser to download it?\nURL: {url}"):
             self.app_info("Ollama update: open the URL in web browser.")
             webbrowser.open_new(url)
         else:
@@ -1392,6 +1413,53 @@ class OllamaLauncherGUI:
         webbrowser.open_new(self.OLLAMA_MODEL_LIST)
         self.app_info("open webpage of OLLAMA_MODEL_LIST")
 
+    def get_ollama_version(self) -> str | None:
+        ollama_path = self.vars['ollama_exe_path'].get()
+
+        try:
+            command = [ollama_path, "-v"] 
+            result = subprocess.run(
+                command,
+                capture_output=True,  
+                text=True,            
+                check=True,           
+                encoding='utf-8'      
+            )
+
+            output = result.stdout.strip() 
+
+            match = re.search(r"(?:ollama version is|client version is)\s+([\d\.]+)", output)
+            
+            if match:
+                version = match.group(1) 
+                self.app_info(f"Ollama version tag: '{version}'") 
+                return version 
+            else:
+                self.app_err(f"Can not get the version tag from stdout. Output was: '{output}'")
+                return None
+
+        except FileNotFoundError:
+            self.app_err(f"Ollama executable was not found at path: '{ollama_path}'")
+            return None
+        except subprocess.CalledProcessError as e:
+            self.app_err(f"Failed to run command '{' '.join(command)}'. Return code: {e.returncode}")
+            if e.stdout:
+                self.app_err(f"stdout: {e.stdout.strip()}")
+            if e.stderr:
+                self.app_err(f"stderr: {e.stderr.strip()}")
+            return None 
+        except Exception as e:
+            self.app_err(f"An unknown error occurred: {e}")
+            return None
+
+    def get_ollama_version_msgbox(self) -> str | None:
+        version = self.get_ollama_version()
+        if version is None:
+            self.app_err(f"Error. Can not get the version tag.")
+            return
+        else:
+            messagebox.showinfo("Ollama Version", f"The version of Ollama is: {version}")
+            return 
 
 if __name__ == "__main__":
     print('[info] run')
