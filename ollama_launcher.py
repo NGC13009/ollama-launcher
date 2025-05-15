@@ -1,5 +1,5 @@
 # coding = utf-8
-# Arch   = manyArch
+# Arch   = win32
 #
 # @File name:       ollama_launcher.py
 # @brief:           ollama launcher 启动器主程序
@@ -38,6 +38,7 @@ from typing import Optional # 导入 Optional 用于类型提示
 from typing import Optional, Callable
 import platform
 import binascii
+import psutil
 
 from OL_resource import HELP_TEXT, VERSION, DATE, WELCONE_TEXT, icon_base64_data, INFO_TEXT, GITLINK, GITLINK_BOTTOM
 
@@ -901,7 +902,13 @@ class OllamaLauncherGUI:
             self.start_button.config(state=tk.NORMAL)
             self.stop_button.config(state=tk.DISABLED)
                             # Threads reading pipes should exit automatically as pipes close
-
+    def psutil_terminate(self,proc_pid):
+        parent_proc = psutil.Process(proc_pid)
+        for child_proc in parent_proc.children(recursive=True):
+            self.app_info(f"terminate proc PID: {child_proc.ppid()} ...")
+            child_proc.terminate()
+        parent_proc.terminate()
+    
     def stop_ollama(self):
         if not self.is_running or not self.ollama_process:
             self.is_running = False # Ensure state consistency
@@ -920,7 +927,7 @@ class OllamaLauncherGUI:
         try:
             # Important: Check if process is still alive before terminating
             if self.ollama_process.poll() is None:
-                self.ollama_process.terminate()
+                self.psutil_terminate(self.ollama_process.pid)
                 try:
                     self.ollama_process.wait(timeout=3)     # Wait up to 3 seconds
                 except subprocess.TimeoutExpired:
