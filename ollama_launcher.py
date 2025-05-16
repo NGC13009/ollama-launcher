@@ -62,6 +62,7 @@ DEFAULT_SETTINGS = {
         "OLLAMA_KEEP_ALIVE": "-1",
         "OLLAMA_MAX_QUEUE": "512",
         "OLLAMA_NUM_PARALLEL": "1",
+        "OLLAMA_MAX_LOADED_MODELS":"3",
         "OLLAMA_ENABLE_CUDA": "1",
         "CUDA_VISIBLE_DEVICES": "0",
         "OLLAMA_FLASH_ATTENTION": "1",
@@ -263,8 +264,8 @@ class OllamaLauncherGUI:
         self.root.title("Ollama Launcher")
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
         # Increased minsize to better accommodate the side-by-side layout
-        self.root.minsize(1024, 732)
-        self.root.geometry("1024x732") # Adjusted default size
+        self.root.minsize(1024, 752)
+        self.root.geometry("1024x752") # Adjusted default size
 
         try:
             icon_bytes = base64.b64decode(icon_base64_data)
@@ -749,6 +750,7 @@ class OllamaLauncherGUI:
         log_content = self.log_widget.get('1.0', tk.END)
 
         try:
+            self.root.clipboard_clear()
             self.root.clipboard_append(log_content)
 
         except tk.TclError as e:
@@ -759,6 +761,7 @@ class OllamaLauncherGUI:
     def copy_help(self):
 
         try:
+            self.root.clipboard_clear()
             self.root.clipboard_append(HELP_TEXT)
             self.app_time('copy help document to clipboard.')
             messagebox.showinfo("Note", "Copy help document to clipboard success.")
