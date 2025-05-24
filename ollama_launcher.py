@@ -464,6 +464,7 @@ class OllamaLauncherGUI:
         help_about_menu.add_command(label="Ollama webpage", command=self.ollama_webpage)
         help_about_menu.add_command(label="Ollama model list", command=self.ollama_model_list)
         help_about_menu.add_command(label="Download Ollama", command=self.get_update_url_msgbox)
+        help_about_menu.add_command(label="Open Ollama path", command=self.open_ollama_path)
         help_about_menu.add_separator()
         help_about_menu.add_command(label="System info", command=self.get_platform_details_msgbox)
         help_about_menu.add_command(label="Ollama version", command=self.get_ollama_version_msgbox)
@@ -1470,6 +1471,52 @@ class OllamaLauncherGUI:
         else:
             messagebox.showinfo("Ollama Version", f"The version of Ollama is: {version}")
             return 
+    
+    def open_ollama_path(self):
+        file_path_str = self.vars['ollama_exe_path'].get()
+        try:
+            directory_path = os.path.dirname(file_path_str) # 获取文件所在的目录
+
+            if not directory_path:
+                if os.path.isdir(file_path_str):
+                    directory_path = file_path_str
+                else:
+                    self.app_err(f"Can not get the correct file path from : '{file_path_str}' ") # 输出错误提示
+                    return
+            
+            # 3. 检查提取的目录路径是否存在
+            if not os.path.exists(directory_path): # 检查目录是否存在
+                self.app_err(f"path not exist : '{directory_path}' ") # 输出错误提示
+                return
+            
+            if not os.path.isdir(directory_path): # 确保它确实是一个目录
+                self.app_err(f"Path is not valid : '{directory_path}' ")
+                return
+
+            self.app_info(f"Open path : {directory_path}") # 打印将要打开的目录
+
+            # 4. 根据操作系统类型打开目录
+            current_os = platform.system() # 获取当前操作系统名称
+
+            if current_os == "Windows":
+                # 在Windows上，os.startfile() 可以直接打开目录（在文件浏览器中）
+                os.startfile(os.path.normpath(directory_path)) # 使用 normpath 确保路径格式正确
+            elif current_os == "Darwin": # "Darwin" 是 macOS 的内核名称
+                # 在macOS上，使用 'open' 命令
+                subprocess.run(['open', directory_path], check=True) # 执行 open 命令
+            else: # 默认为 Linux 或其他类 Unix 系统
+                # 在Linux上，通常使用 'xdg-open'
+                try:
+                    subprocess.run(['xdg-open', directory_path], check=True) # 执行 xdg-open 命令
+                except FileNotFoundError: # 如果 'xdg-open' 命令未找到
+                    self.app_err(f"Detected OS = Linux. But can not find 'xdg-open'") # 输出错误信息
+                    self.app_err(f"Please open it manully: {directory_path}") # 提示手动打开
+                except subprocess.CalledProcessError as e: # 如果命令执行出错
+                    self.app_err(f"Error occure when open '{directory_path}' with : {e}") # 输出错误信息
+
+        except Exception as e: # 捕获其他所有可能的异常
+            self.app_err(f"Unknow error : {e}") # 输出通用错误信息
+
 
 if __name__ == "__main__":
     print('[info] run')
