@@ -7,6 +7,7 @@
 #                           ```
 #                           # -w 不要命令行终端， -F打包为单个文件，-i指定图标
 #                           pyinstaller -w .\ollama_launcher.py -i .\favicon.ico -y
+#                           pyinstaller -w .\ollama_launcher.py -i .\favicon.ico -y --distpath C:\application\ollama
 #                           ```.
 # @attention:       None
 # @TODO:            None
@@ -86,7 +87,7 @@ class AnsiColorText(tk.Text):
         kwargs.setdefault('background', default_bg)
         kwargs.setdefault('foreground', default_fg)
         kwargs.setdefault('insertbackground', 'white')
-        kwargs.setdefault('state', tk.DISABLED)
+        kwargs.setdefault('state', tk.NORMAL)  # 修改为 NORMAL
 
         super().__init__(master, **kwargs)
 
@@ -135,7 +136,8 @@ class AnsiColorText(tk.Text):
             '45': {'background': '#75507b'},  # Magenta background
             '46': {'background': '#06989a'},  # Cyan background
             '47': {'background': '#d3d7cf'},  # White background
-            '49': {'background': default_bg}  # Default background
+            '49': {'background': default_bg},  # Default background
+            'sel' : {'background': '#4444ee', 'foreground': '#efefef'},  # 选中时的样式
         }
         # yapf: enable
 
@@ -166,7 +168,6 @@ class AnsiColorText(tk.Text):
         Inserts text containing ANSI escape codes, applying colors/styles.
         Manages widget state (NORMAL/DISABLED) and scrolling.
         """
-        current_state = self.cget('state')
         self.config(state=tk.NORMAL) # Enable writing
 
         # Split text by ANSI codes, keeping the codes as delimiters
@@ -180,59 +181,58 @@ class AnsiColorText(tk.Text):
                 # This is plain text
                 # Determine tags based on active codes, excluding '0' unless it's the only one
                 current_tags = tuple(f"ansi_{code}" for code in self.active_codes if code != '0')
-                # Use default tag 'ansi_0' if no specific codes are active
-                tags_to_apply = current_tags if current_tags else ('ansi_0', )
-                self.insert(tk.END, part, tags_to_apply)
+                self.insert(tk.END, part, current_tags + ("sel",))  # 添加 sel 标签
             else:
-                # This is an ANSI code sequence (the part inside \x1b[...m)
-                if not part: # Handle case like \x1b[m (reset)
-                    codes = ['0']
-                else:
-                    codes = part.split(';')
-
-                # Process codes within the sequence
+                # This is ANSI code
+                codes = part.split(';')
                 needs_reset = False
                 new_codes_in_sequence = set()
 
                 for code in codes:
-                    if not code: continue   # Skip empty codes from ;;
+                    if not code:
+                        continue
                     code = code.lstrip('0')
-                    if not code: code = '0' # Treat '0' or '00' as '0'
+                    if not code:
+                        code = '0'
 
                     if code == '0':
                         needs_reset = True
-                        break # Reset overrides others in this sequence
-
+                        break
                     if code in self.tag_configs:
                         new_codes_in_sequence.add(code)
 
-                # Apply changes to active_codes
                 if needs_reset:
                     self.active_codes = {'0'}
                 else:
-                    # Remove conflicting codes before adding new ones
                     temp_active = set(self.active_codes)
                     for new_code in new_codes_in_sequence:
-                        if '30' <= new_code <= '37' or new_code == '39':   # Foreground
+                        if '30' <= new_code <= '37' or new_code == '39':
                             temp_active = {c for c in temp_active if not ('30' <= c <= '37' or c == '39')}
-                        elif '40' <= new_code <= '47' or new_code == '49': # Background
+                        elif '40' <= new_code <= '47' or new_code == '49':
                             temp_active = {c for c in temp_active if not ('40' <= c <= '47' or c == '49')}
-                        elif new_code == '22':                             # Normal intensity cancels bold
+                        elif new_code == '22':
                             temp_active.discard('1')
-                        elif new_code == '24':                             # Not underlined cancels underline
+                        elif new_code == '24':
                             temp_active.discard('4')
-                                                                           # Add the new codes
                     temp_active.update(new_codes_in_sequence)
-                                                                           # Ensure '0' is removed if any other code is active
                     if len(temp_active) > 1:
                         temp_active.discard('0')
-                    elif not temp_active:                                  # If all codes cancelled out, reset
+                    elif not temp_active:
                         temp_active = {'0'}
-
                     self.active_codes = temp_active
 
-        self.see(tk.END)                 # Scroll to the end
-        self.config(state=current_state) # Restore original state (usually DISABLED)
+        self.see(tk.END)
+        
+    def copy_selection(self, event):
+        """复制选中的文本到剪贴板."""
+        try:
+            selected_text = self.get(tk.SEL_FIRST, tk.SEL_LAST)
+            self.clipboard_clear()
+            self.clipboard_append(selected_text)
+            return "break"  # 阻止默认行为
+        except tk.TclError:
+            # 没有选中内容
+            return "break"
 
 
 class OllamaLauncherGUI:
@@ -421,6 +421,9 @@ class OllamaLauncherGUI:
         v_scrollbar = ttk.Scrollbar(log_frame, orient=tk.VERTICAL, command=self.log_widget.yview)
         v_scrollbar.grid(row=0, column=1, sticky=(tk.N, tk.S))
         self.log_widget.configure(yscrollcommand=v_scrollbar.set)
+        self.log_widget.config(state=tk.NORMAL)  # 允许选中/复制
+        self.log_widget.bind("<Key>", lambda e: "break")  # 阻止用户输入
+        self.log_widget.bind("<Control-c>", self.log_widget.copy_selection)
 
         # --- Load Initial Settings & Start Log Processing ---
         self.load_settings()     # Load settings first
@@ -513,7 +516,11 @@ class OllamaLauncherGUI:
         text_area = scrolledtext.ScrolledText(help_window, wrap=tk.WORD, width=80, height=20, bg=bg_color, fg="#1e1e1e", bd=0, highlightthickness=0)
         text_area.pack(padx=10, pady=10, expand=True, fill=tk.BOTH)
         text_area.insert(tk.END, HELP_TEXT)
-        text_area.config(state=tk.DISABLED) # 禁止用户编辑
+        text_area.config(state=tk.DISABLED)  # 禁止用户编辑
+
+        # 允许用户选中和复制文本
+        text_area.tag_configure("selectable", selectforeground="black", selectbackground="lightgray")
+        text_area.tag_add("selectable", "1.0", tk.END)
 
         style = ttk.Style()
         style.configure("HelpButtonFrame.TFrame", background=bg_color)
@@ -741,10 +748,8 @@ class OllamaLauncherGUI:
         self.app_time('settings saved.')
 
     def clear_log(self):
-        self.log_widget.config(state=tk.NORMAL)
         self.log_widget.delete('1.0', tk.END)
         self.log_widget.active_codes = {'0'}
-        self.log_widget.config(state=tk.DISABLED) # Explicitly set back to DISABLED
         self.app_time()
 
     def copy_log(self):
