@@ -169,6 +169,9 @@ class AnsiColorText(tk.Text):
         Manages widget state (NORMAL/DISABLED) and scrolling.
         """
         self.config(state=tk.NORMAL) # Enable writing
+        
+        # 判断插入前是否贴底
+        was_at_bottom = (self.yview()[1] == 1.0)
 
         # Split text by ANSI codes, keeping the codes as delimiters
         parts = self.ansi_escape_pattern.split(text)
@@ -221,7 +224,9 @@ class AnsiColorText(tk.Text):
                         temp_active = {'0'}
                     self.active_codes = temp_active
 
-        self.see(tk.END)
+        # 插入完成后，根据贴底状态决定是否滚动到底部
+        if was_at_bottom:
+            self.see(tk.END)
         
     def copy_selection(self, event):
         """复制选中的文本到剪贴板."""
