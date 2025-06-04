@@ -7,6 +7,7 @@
 #                           ```
 #                           # -w 不要命令行终端， -F打包为单个文件，-i指定图标
 #                           pyinstaller -w .\ollama_launcher.py -i .\favicon.ico -y
+#                           pyinstaller -w .\ollama_launcher.py -i .\favicon.ico -y --distpath C:\application\ollama
 #                           ```.
 # @attention:       None
 # @TODO:            None
@@ -62,6 +63,7 @@ DEFAULT_SETTINGS = {
         "OLLAMA_KEEP_ALIVE": "-1",
         "OLLAMA_MAX_QUEUE": "512",
         "OLLAMA_NUM_PARALLEL": "1",
+        "OLLAMA_MAX_LOADED_MODELS":"3",
         "OLLAMA_ENABLE_CUDA": "1",
         "CUDA_VISIBLE_DEVICES": "0",
         "OLLAMA_FLASH_ATTENTION": "1",
@@ -85,7 +87,7 @@ class AnsiColorText(tk.Text):
         kwargs.setdefault('background', default_bg)
         kwargs.setdefault('foreground', default_fg)
         kwargs.setdefault('insertbackground', 'white')
-        kwargs.setdefault('state', tk.DISABLED)
+        kwargs.setdefault('state', tk.NORMAL)  # 修改为 NORMAL
 
         super().__init__(master, **kwargs)
 
@@ -134,7 +136,8 @@ class AnsiColorText(tk.Text):
             '45': {'background': '#75507b'},  # Magenta background
             '46': {'background': '#06989a'},  # Cyan background
             '47': {'background': '#d3d7cf'},  # White background
-            '49': {'background': default_bg}  # Default background
+            '49': {'background': default_bg},  # Default background
+            'sel' : {'background': '#4444ee', 'foreground': '#efefef'},  # 选中时的样式
         }
         # yapf: enable
 
@@ -165,8 +168,10 @@ class AnsiColorText(tk.Text):
         Inserts text containing ANSI escape codes, applying colors/styles.
         Manages widget state (NORMAL/DISABLED) and scrolling.
         """
-        current_state = self.cget('state')
         self.config(state=tk.NORMAL) # Enable writing
+        
+        # 判断插入前是否贴底
+        was_at_bottom = (self.yview()[1] == 1.0)
 
         # Split text by ANSI codes, keeping the codes as delimiters
         parts = self.ansi_escape_pattern.split(text)
@@ -179,59 +184,60 @@ class AnsiColorText(tk.Text):
                 # This is plain text
                 # Determine tags based on active codes, excluding '0' unless it's the only one
                 current_tags = tuple(f"ansi_{code}" for code in self.active_codes if code != '0')
-                # Use default tag 'ansi_0' if no specific codes are active
-                tags_to_apply = current_tags if current_tags else ('ansi_0', )
-                self.insert(tk.END, part, tags_to_apply)
+                self.insert(tk.END, part, current_tags + ("sel",))  # 添加 sel 标签
             else:
-                # This is an ANSI code sequence (the part inside \x1b[...m)
-                if not part: # Handle case like \x1b[m (reset)
-                    codes = ['0']
-                else:
-                    codes = part.split(';')
-
-                # Process codes within the sequence
+                # This is ANSI code
+                codes = part.split(';')
                 needs_reset = False
                 new_codes_in_sequence = set()
 
                 for code in codes:
-                    if not code: continue   # Skip empty codes from ;;
+                    if not code:
+                        continue
                     code = code.lstrip('0')
-                    if not code: code = '0' # Treat '0' or '00' as '0'
+                    if not code:
+                        code = '0'
 
                     if code == '0':
                         needs_reset = True
-                        break # Reset overrides others in this sequence
-
+                        break
                     if code in self.tag_configs:
                         new_codes_in_sequence.add(code)
 
-                # Apply changes to active_codes
                 if needs_reset:
                     self.active_codes = {'0'}
                 else:
-                    # Remove conflicting codes before adding new ones
                     temp_active = set(self.active_codes)
                     for new_code in new_codes_in_sequence:
-                        if '30' <= new_code <= '37' or new_code == '39':   # Foreground
+                        if '30' <= new_code <= '37' or new_code == '39':
                             temp_active = {c for c in temp_active if not ('30' <= c <= '37' or c == '39')}
-                        elif '40' <= new_code <= '47' or new_code == '49': # Background
+                        elif '40' <= new_code <= '47' or new_code == '49':
                             temp_active = {c for c in temp_active if not ('40' <= c <= '47' or c == '49')}
-                        elif new_code == '22':                             # Normal intensity cancels bold
+                        elif new_code == '22':
                             temp_active.discard('1')
-                        elif new_code == '24':                             # Not underlined cancels underline
+                        elif new_code == '24':
                             temp_active.discard('4')
-                                                                           # Add the new codes
                     temp_active.update(new_codes_in_sequence)
-                                                                           # Ensure '0' is removed if any other code is active
                     if len(temp_active) > 1:
                         temp_active.discard('0')
-                    elif not temp_active:                                  # If all codes cancelled out, reset
+                    elif not temp_active:
                         temp_active = {'0'}
-
                     self.active_codes = temp_active
 
-        self.see(tk.END)                 # Scroll to the end
-        self.config(state=current_state) # Restore original state (usually DISABLED)
+        # 插入完成后，根据贴底状态决定是否滚动到底部
+        if was_at_bottom:
+            self.see(tk.END)
+        
+    def copy_selection(self, event):
+        """复制选中的文本到剪贴板."""
+        try:
+            selected_text = self.get(tk.SEL_FIRST, tk.SEL_LAST)
+            self.clipboard_clear()
+            self.clipboard_append(selected_text)
+            return "break"  # 阻止默认行为
+        except tk.TclError:
+            # 没有选中内容
+            return "break"
 
 
 class OllamaLauncherGUI:
@@ -263,8 +269,8 @@ class OllamaLauncherGUI:
         self.root.title("Ollama Launcher")
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
         # Increased minsize to better accommodate the side-by-side layout
-        self.root.minsize(1024, 732)
-        self.root.geometry("1024x732") # Adjusted default size
+        self.root.minsize(1024, 752)
+        self.root.geometry("1024x752") # Adjusted default size
 
         try:
             icon_bytes = base64.b64decode(icon_base64_data)
@@ -420,6 +426,9 @@ class OllamaLauncherGUI:
         v_scrollbar = ttk.Scrollbar(log_frame, orient=tk.VERTICAL, command=self.log_widget.yview)
         v_scrollbar.grid(row=0, column=1, sticky=(tk.N, tk.S))
         self.log_widget.configure(yscrollcommand=v_scrollbar.set)
+        self.log_widget.config(state=tk.NORMAL)  # 允许选中/复制
+        self.log_widget.bind("<Key>", lambda e: "break")  # 阻止用户输入
+        self.log_widget.bind("<Control-c>", self.log_widget.copy_selection)
 
         # --- Load Initial Settings & Start Log Processing ---
         self.load_settings()     # Load settings first
@@ -463,6 +472,7 @@ class OllamaLauncherGUI:
         help_about_menu.add_command(label="Ollama webpage", command=self.ollama_webpage)
         help_about_menu.add_command(label="Ollama model list", command=self.ollama_model_list)
         help_about_menu.add_command(label="Download Ollama", command=self.get_update_url_msgbox)
+        help_about_menu.add_command(label="Open Ollama path", command=self.open_ollama_path)
         help_about_menu.add_separator()
         help_about_menu.add_command(label="System info", command=self.get_platform_details_msgbox)
         help_about_menu.add_command(label="Ollama version", command=self.get_ollama_version_msgbox)
@@ -511,7 +521,11 @@ class OllamaLauncherGUI:
         text_area = scrolledtext.ScrolledText(help_window, wrap=tk.WORD, width=80, height=20, bg=bg_color, fg="#1e1e1e", bd=0, highlightthickness=0)
         text_area.pack(padx=10, pady=10, expand=True, fill=tk.BOTH)
         text_area.insert(tk.END, HELP_TEXT)
-        text_area.config(state=tk.DISABLED) # 禁止用户编辑
+        text_area.config(state=tk.DISABLED)  # 禁止用户编辑
+
+        # 允许用户选中和复制文本
+        text_area.tag_configure("selectable", selectforeground="black", selectbackground="lightgray")
+        text_area.tag_add("selectable", "1.0", tk.END)
 
         style = ttk.Style()
         style.configure("HelpButtonFrame.TFrame", background=bg_color)
@@ -739,16 +753,15 @@ class OllamaLauncherGUI:
         self.app_time('settings saved.')
 
     def clear_log(self):
-        self.log_widget.config(state=tk.NORMAL)
         self.log_widget.delete('1.0', tk.END)
         self.log_widget.active_codes = {'0'}
-        self.log_widget.config(state=tk.DISABLED) # Explicitly set back to DISABLED
         self.app_time()
 
     def copy_log(self):
         log_content = self.log_widget.get('1.0', tk.END)
 
         try:
+            self.root.clipboard_clear()
             self.root.clipboard_append(log_content)
 
         except tk.TclError as e:
@@ -759,6 +772,7 @@ class OllamaLauncherGUI:
     def copy_help(self):
 
         try:
+            self.root.clipboard_clear()
             self.root.clipboard_append(HELP_TEXT)
             self.app_time('copy help document to clipboard.')
             messagebox.showinfo("Note", "Copy help document to clipboard success.")
@@ -1467,6 +1481,52 @@ class OllamaLauncherGUI:
         else:
             messagebox.showinfo("Ollama Version", f"The version of Ollama is: {version}")
             return 
+    
+    def open_ollama_path(self):
+        file_path_str = self.vars['ollama_exe_path'].get()
+        try:
+            directory_path = os.path.dirname(file_path_str) # 获取文件所在的目录
+
+            if not directory_path:
+                if os.path.isdir(file_path_str):
+                    directory_path = file_path_str
+                else:
+                    self.app_err(f"Can not get the correct file path from : '{file_path_str}' ") # 输出错误提示
+                    return
+            
+            # 3. 检查提取的目录路径是否存在
+            if not os.path.exists(directory_path): # 检查目录是否存在
+                self.app_err(f"path not exist : '{directory_path}' ") # 输出错误提示
+                return
+            
+            if not os.path.isdir(directory_path): # 确保它确实是一个目录
+                self.app_err(f"Path is not valid : '{directory_path}' ")
+                return
+
+            self.app_info(f"Open path : {directory_path}") # 打印将要打开的目录
+
+            # 4. 根据操作系统类型打开目录
+            current_os = platform.system() # 获取当前操作系统名称
+
+            if current_os == "Windows":
+                # 在Windows上，os.startfile() 可以直接打开目录（在文件浏览器中）
+                os.startfile(os.path.normpath(directory_path)) # 使用 normpath 确保路径格式正确
+            elif current_os == "Darwin": # "Darwin" 是 macOS 的内核名称
+                # 在macOS上，使用 'open' 命令
+                subprocess.run(['open', directory_path], check=True) # 执行 open 命令
+            else: # 默认为 Linux 或其他类 Unix 系统
+                # 在Linux上，通常使用 'xdg-open'
+                try:
+                    subprocess.run(['xdg-open', directory_path], check=True) # 执行 xdg-open 命令
+                except FileNotFoundError: # 如果 'xdg-open' 命令未找到
+                    self.app_err(f"Detected OS = Linux. But can not find 'xdg-open'") # 输出错误信息
+                    self.app_err(f"Please open it manully: {directory_path}") # 提示手动打开
+                except subprocess.CalledProcessError as e: # 如果命令执行出错
+                    self.app_err(f"Error occure when open '{directory_path}' with : {e}") # 输出错误信息
+
+        except Exception as e: # 捕获其他所有可能的异常
+            self.app_err(f"Unknow error : {e}") # 输出通用错误信息
+
 
 if __name__ == "__main__":
     print('[info] run')

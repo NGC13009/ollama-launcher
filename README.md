@@ -179,4 +179,5 @@ Please contact the author or submit an issue if you encounter problems or want t
 21. [o]ollama服务的颜色怎么显示？
 22. [o]自动换行
 23. [o]相关网页增加打开快速链接
+24. [o]修复子进程不正常退出的bug
 
