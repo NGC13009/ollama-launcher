@@ -5,8 +5,6 @@ A Better Ollama Service Launcher
 
 ![title png](./title.png)
 
-Welcome to Ollama Launcher!
-
 ### Quick Start
 
 Download the standalone executable for ollama-launcher: [click here](https://github.com/NGC13009/ollama-launcher/releases/)
