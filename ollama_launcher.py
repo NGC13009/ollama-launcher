@@ -19,7 +19,6 @@ from tkinter import ttk, filedialog, messagebox, scrolledtext
 import subprocess
 import json
 import os
-import sys
 import threading
 import time
 import queue
@@ -42,6 +41,7 @@ import binascii
 import psutil
 
 from OL_resource import HELP_TEXT, VERSION, DATE, WELCONE_TEXT, icon_base64_data, INFO_TEXT, GITLINK, GITLINK_BOTTOM
+from utils import *
 
 has_pystray = True
 
@@ -75,169 +75,6 @@ DEFAULT_SETTINGS = {
     "start_minimized": False,
     "user_env": {}                                                     # 字典，包含环境变量name和var
 }
-
-
-# 彩色打印以支持ANSI着色
-class AnsiColorText(tk.Text):
-
-    def __init__(self, master=None, **kwargs):
-        default_bg = '#1e1e1e'
-        default_fg = '#efefef'
-
-        kwargs.setdefault('background', default_bg)
-        kwargs.setdefault('foreground', default_fg)
-        kwargs.setdefault('insertbackground', 'white')
-        kwargs.setdefault('state', tk.NORMAL) # 修改为 NORMAL
-
-        super().__init__(master, **kwargs)
-
-        # Regex to find ANSI escape sequences
-        self.ansi_escape_pattern = re.compile(r'\x1b\[([\d;]*)m')
-
-        # --- Basic ANSI SGR code to Tkinter tag mapping ---
-        # yapf: disable
-        self.tag_configs = {
-            # Reset
-            '0': {'foreground': default_fg, 'background': default_bg, 'font': self._get_font_config()},
-
-            # Styles
-            '1': {'font': self._get_font_config(bold=True)},  # Bold
-            '4': {'underline': True},                         # Underline
-            '22': {'font': self._get_font_config(bold=False)},# Normal intensity (undo bold)
-            '24': {'underline': False},                       # Not underlined
-
-            # Foreground colors (30-37)
-            '30': {'foreground': '#2e3436'},  # Black (use dark gray)
-            '31': {'foreground': '#cc0000'},  # Red
-            '32': {'foreground': '#4e9a06'},  # Green
-            '33': {'foreground': '#c4a000'},  # Yellow
-            '34': {'foreground': '#3465a4'},  # Blue
-            '35': {'foreground': '#75507b'},  # Magenta
-            '36': {'foreground': '#06989a'},  # Cyan
-            '37': {'foreground': '#d3d7cf'},  # White (use light gray)
-            '39': {'foreground': default_fg}, # Default foreground
-
-            # --- 添加亮色前景 (90-97) ---
-            '90': {'foreground': '#555753'},  # Bright Black (darker gray)
-            '91': {'foreground': '#ef2929'},  # Bright Red
-            '92': {'foreground': '#8ae234'},  # Bright Green
-            '93': {'foreground': '#fce94f'},  # Bright Yellow
-            '94': {'foreground': '#729fcf'},  # Bright Blue
-            '95': {'foreground': '#ad7fa8'},  # Bright Magenta
-            '96': {'foreground': '#34e2e2'},  # Bright Cyan
-            '97': {'foreground': '#eeeeec'},  # Bright White
-
-            # Background colors (40-47)
-            '40': {'background': '#2e3436'},  # Black background
-            '41': {'background': '#cc0000'},  # Red background
-            '42': {'background': '#4e9a06'},  # Green background
-            '43': {'background': '#c4a000'},  # Yellow background
-            '44': {'background': '#3465a4'},  # Blue background
-            '45': {'background': '#75507b'},  # Magenta background
-            '46': {'background': '#06989a'},  # Cyan background
-            '47': {'background': '#d3d7cf'},  # White background
-            '49': {'background': default_bg},  # Default background
-            'sel' : {'background': '#4444ee', 'foreground': '#efefef'},  # 选中时的样式
-        }
-        # yapf: enable
-
-        # --- Configure tags ---
-        for code, config in self.tag_configs.items():
-            tag_name = f"ansi_{code}"
-            self.tag_configure(tag_name, **config)
-
-        # Keep track of currently active SGR codes for applying tags
-        self.active_codes = {'0'} # Start with reset state
-
-    def _get_font_config(self, bold=False, italic=False):
-        """Gets a font configuration tuple based on the widget's default font."""
-        font_str = str(self.cget('font'))
-        try:
-            font_parts = font_str.split()
-            family = font_parts[0] if font_parts else "TkDefaultFont"
-            size = int(font_parts[1]) if len(font_parts) > 1 else 10
-            weight = "bold" if bold else "normal"
-            slant = "italic" if italic else "roman"
-            # Ensure underline is not part of the font tuple directly
-            return (family, size, weight, slant)
-        except Exception:
-            return ("TkDefaultFont", 10, "bold" if bold else "normal", "italic" if italic else "roman")
-
-    def write_ansi(self, text):
-        """
-        Inserts text containing ANSI escape codes, applying colors/styles.
-        Manages widget state (NORMAL/DISABLED) and scrolling.
-        """
-        self.config(state=tk.NORMAL) # Enable writing
-
-        # 判断插入前是否贴底
-        was_at_bottom = (self.yview()[1] == 1.0)
-
-        # Split text by ANSI codes, keeping the codes as delimiters
-        parts = self.ansi_escape_pattern.split(text)
-
-        for i, part in enumerate(parts):
-            if not part: # Skip empty parts
-                continue
-
-            if i % 2 == 0:
-                # This is plain text
-                # Determine tags based on active codes, excluding '0' unless it's the only one
-                current_tags = tuple(f"ansi_{code}" for code in self.active_codes if code != '0')
-                self.insert(tk.END, part, current_tags + ("sel", )) # 添加 sel 标签
-            else:
-                                                                    # This is ANSI code
-                codes = part.split(';')
-                needs_reset = False
-                new_codes_in_sequence = set()
-
-                for code in codes:
-                    if not code:
-                        continue
-                    code = code.lstrip('0')
-                    if not code:
-                        code = '0'
-
-                    if code == '0':
-                        needs_reset = True
-                        break
-                    if code in self.tag_configs:
-                        new_codes_in_sequence.add(code)
-
-                if needs_reset:
-                    self.active_codes = {'0'}
-                else:
-                    temp_active = set(self.active_codes)
-                    for new_code in new_codes_in_sequence:
-                        if '30' <= new_code <= '37' or new_code == '39':
-                            temp_active = {c for c in temp_active if not ('30' <= c <= '37' or c == '39')}
-                        elif '40' <= new_code <= '47' or new_code == '49':
-                            temp_active = {c for c in temp_active if not ('40' <= c <= '47' or c == '49')}
-                        elif new_code == '22':
-                            temp_active.discard('1')
-                        elif new_code == '24':
-                            temp_active.discard('4')
-                    temp_active.update(new_codes_in_sequence)
-                    if len(temp_active) > 1:
-                        temp_active.discard('0')
-                    elif not temp_active:
-                        temp_active = {'0'}
-                    self.active_codes = temp_active
-
-        # 插入完成后，根据贴底状态决定是否滚动到底部
-        if was_at_bottom:
-            self.see(tk.END)
-
-    def copy_selection(self, event):
-        """复制选中的文本到剪贴板."""
-        try:
-            selected_text = self.get(tk.SEL_FIRST, tk.SEL_LAST)
-            self.clipboard_clear()
-            self.clipboard_append(selected_text)
-            return "break" # 阻止默认行为
-        except tk.TclError:
-                           # 没有选中内容
-            return "break"
 
 
 class OllamaLauncherGUI:
@@ -356,7 +193,16 @@ class OllamaLauncherGUI:
 
                 ttk.Entry(entry_frame, textvariable=self.vars[key], width=30).grid(row=0, column=0, sticky=(tk.W, tk.E), padx=(5, 0))
                 ttk.Button(entry_frame, text="/", command=lambda k=key: self.browse_directory(k), width=2).grid(row=0, column=1, padx=5)
-            else:  # 其他就正常文本框
+            elif key in ["OLLAMA_CONTEXT_LENGTH", "OLLAMA_MAX_QUEUE", "OLLAMA_NUM_PARALLEL", "OLLAMA_MAX_LOADED_MODELS"]: # 数值
+                try:
+                    init_val = int(default_value)
+                except (ValueError, TypeError):
+                    init_val = 0
+                self.vars[key] = tk.IntVar(value=init_val)
+                vcmd = self.root.register(self.validate_spinbox)
+                spinbox = ttk.Spinbox(env_frame, textvariable=self.vars[key], from_=0, to=1048576, width=28, validate="key", validatecommand=(vcmd, "%P"))
+                spinbox.grid(row=row_num, column=1, columnspan=2, sticky=(tk.W, tk.E), padx=5, pady=2)
+            else:                                                                                                         # 其他就正常文本框
                 self.vars[key] = tk.StringVar(value=default_value)
                 ttk.Entry(env_frame, textvariable=self.vars[key], width=30).grid(row=row_num, column=1, columnspan=2, sticky=(tk.W, tk.E), padx=5, pady=2)
             row_num += 1
@@ -489,6 +335,12 @@ class OllamaLauncherGUI:
             self.start_ollama()
             self.root.after(100, self.hide_window) # Slightly longer delay
         self.welcome_text()
+
+    def validate_spinbox(self, value_if_allowed):
+        # 数字输入框不能出现乱七八糟的东西
+        if value_if_allowed == "":
+            return True
+        return bool(re.fullmatch(r"^-?\d*$", value_if_allowed))
 
     def welcome_text(self):
         self.app_info("-+++-----------------------------------------------+++-")
@@ -722,6 +574,12 @@ class OllamaLauncherGUI:
                 else:
                     tk_var.set(str(value))
 
+        error_code = self.check_settings()
+        if error_code > 0:
+            self.app_err(f'Project setup check failed. Can not enable settings. Error with {bin(error_code)}')
+            self.app_time()
+            return
+
         # Update start_minimized var (handle potential missing key)
         start_min_value = self.settings.get('start_minimized', DEFAULT_SETTINGS['start_minimized'])
         self.start_minimized_var.set(bool(start_min_value))
@@ -735,6 +593,11 @@ class OllamaLauncherGUI:
         self.app_time('settings enabled.')
 
     def save_settings(self):
+        error_code = self.check_settings()
+        if error_code > 0:
+            self.app_err(f'Project setup check failed. No new configurations will be stored until it is fixed. Error with {bin(error_code)}')
+            self.app_time()
+            return
         current_settings = {'ollama_exe_path': self.vars['ollama_exe_path'].get(), 'variables': {}, 'start_minimized': self.start_minimized_var.get(), "user_env": self.user_env}
         for key, tk_var in self.vars.items():
             if key != 'ollama_exe_path':
@@ -828,6 +691,12 @@ class OllamaLauncherGUI:
             self.app_info(f"{pipe_name} stream closed")
 
     def start_ollama(self):
+        error_code = self.check_settings()
+        if error_code > 0:
+            self.app_err(f'Project setup check failed. Ollama not start. Error with {bin(error_code)}')
+            self.app_time()
+            return
+
         if self.is_running:
             messagebox.showwarning("Info", "Ollama is already running.")
             self.app_warn("Ollama is already running.")
@@ -1436,6 +1305,12 @@ class OllamaLauncherGUI:
         self.app_info("open webpage of OLLAMA_MODEL_LIST")
 
     def get_ollama_version(self) -> str | None:
+        error_code = self.check_settings()
+        if error_code > 0:
+            self.app_err(f'Project setup check failed. Fix problem and then to try again. Error with {bin(error_code)}')
+            self.app_time()
+            return
+
         ollama_path = self.vars['ollama_exe_path'].get()
 
         try:
@@ -1521,6 +1396,138 @@ class OllamaLauncherGUI:
 
         except Exception as e:                  # 捕获其他所有可能的异常
             self.app_err(f"Unknow error : {e}") # 输出通用错误信息
+
+    def check_settings(self, vars=None):
+        error_code = 0
+        if vars == None:
+            vars = self.vars
+        try:
+            ollama_exe_path = vars['ollama_exe_path'].get()
+            OLLAMA_MODELS = vars['OLLAMA_MODELS'].get()
+            OLLAMA_TMPDIR = vars['OLLAMA_TMPDIR'].get()
+            OLLAMA_HOST = vars['OLLAMA_HOST'].get()
+            OLLAMA_ORIGINS = vars['OLLAMA_ORIGINS'].get()
+            OLLAMA_CONTEXT_LENGTH = vars['OLLAMA_CONTEXT_LENGTH'].get()
+            OLLAMA_KV_CACHE_TYPE = vars['OLLAMA_KV_CACHE_TYPE'].get()
+            OLLAMA_KEEP_ALIVE = vars['OLLAMA_KEEP_ALIVE'].get()
+            OLLAMA_MAX_QUEUE = vars['OLLAMA_MAX_QUEUE'].get()
+            OLLAMA_NUM_PARALLEL = vars['OLLAMA_NUM_PARALLEL'].get()
+            OLLAMA_MAX_LOADED_MODELS = vars['OLLAMA_MAX_LOADED_MODELS'].get()
+            OLLAMA_ENABLE_CUDA = vars['OLLAMA_ENABLE_CUDA'].get()
+            CUDA_VISIBLE_DEVICES = vars['CUDA_VISIBLE_DEVICES'].get()
+            OLLAMA_FLASH_ATTENTION = vars['OLLAMA_FLASH_ATTENTION'].get()
+            OLLAMA_USE_MLOCK = vars['OLLAMA_USE_MLOCK'].get()
+            OLLAMA_MULTIUSER_CACHE = vars['OLLAMA_MULTIUSER_CACHE'].get()
+            OLLAMA_INTEL_GPU = vars['OLLAMA_INTEL_GPU'].get()
+            OLLAMA_DEBUG = vars['OLLAMA_DEBUG'].get()
+        except Exception as e:
+            self.app_err(f"Check fault! Error somewhere when loading config variables: {e}")
+            messagebox.showinfo("Check fault!", f"Error somewhere when loading config variables: {e}")
+            error_code = 131072
+            return error_code
+
+        # Validate ollama_exe_path
+        if (not ollama_exe_path) or (not os.path.isfile(ollama_exe_path)):
+            self.app_err(f"Config fault! ollama_exe_path file not found: {ollama_exe_path}.")
+            messagebox.showinfo("Config fault!", f"ollama_exe_path file not found: {ollama_exe_path}")
+            error_code += 1
+        # Validate OLLAMA_MODELS
+        if (not OLLAMA_MODELS) or (not os.path.isdir(OLLAMA_MODELS)):
+            self.app_err(f"Config fault! OLLAMA_MODELS directory not found: {OLLAMA_MODELS}.")
+            messagebox.showinfo("Config fault!", f"OLLAMA_MODELS directory not found: {OLLAMA_MODELS}")
+            error_code += 2
+
+        # Validate OLLAMA_TMPDIR
+        if (not OLLAMA_TMPDIR) or (not os.path.isdir(OLLAMA_TMPDIR)):
+            self.app_err(f"Config fault! OLLAMA_TMPDIR directory not found: {OLLAMA_TMPDIR}.")
+            messagebox.showinfo("Config fault!", f"OLLAMA_TMPDIR directory not found: {OLLAMA_TMPDIR}")
+            error_code += 4
+
+        # Validate OLLAMA_HOST
+        if not is_valid_host_port(OLLAMA_HOST):
+            self.app_err(f"Config fault! OLLAMA_HOST must be a valid IP:port. Current value: {OLLAMA_HOST}")
+            messagebox.showinfo("Config fault!", "OLLAMA_HOST must be a valid IP:port")
+            error_code += 8
+
+        # Validate OLLAMA_ORIGINS
+        # it just any string...
+
+        # Validate OLLAMA_CONTEXT_LENGTH
+        if OLLAMA_CONTEXT_LENGTH <= 0:
+            self.app_err("fConfig fault! OLLAMA_CONTEXT_LENGTH must be a positive integer. Current value: {OLLAMA_CONTEXT_LENGTH}")
+            messagebox.showinfo("Config fault!", "OLLAMA_CONTEXT_LENGTH must be a positive integer")
+            error_code += 16
+
+        # Validate OLLAMA_KV_CACHE_TYPE
+        if OLLAMA_KV_CACHE_TYPE not in ["f16", "q8_0", "q4_0"]:
+            self.app_err(f"Config fault! OLLAMA_KV_CACHE_TYPE must be one of 'f16', 'q8_0', 'q4_0'. Current value: {OLLAMA_KV_CACHE_TYPE}")
+            messagebox.showinfo("Config fault!", "OLLAMA_KV_CACHE_TYPE must be one of 'f16', 'q8_0', 'q4_0'")
+            error_code += 32
+
+        # OLLAMA_KEEP_ALIVE can be "1500" or such as "5m0s"... 不弄了算了
+
+        # Validate OLLAMA_MAX_QUEUE
+        if OLLAMA_MAX_QUEUE <= 0:
+            self.app_err(f"Config fault! OLLAMA_MAX_QUEUE must be a positive integer. Current value: {OLLAMA_MAX_QUEUE}")
+            messagebox.showinfo("Config fault!", "OLLAMA_MAX_QUEUE must be a positive integer")
+            error_code += 128
+
+        # Validate OLLAMA_NUM_PARALLEL
+        if int(OLLAMA_NUM_PARALLEL) <= 0:
+            self.app_err(f"Config fault! OLLAMA_NUM_PARALLEL must be a positive integer. Current value: {OLLAMA_NUM_PARALLEL}")
+            messagebox.showinfo("Config fault!", "OLLAMA_NUM_PARALLEL must be a positive integer")
+            error_code += 256
+
+        # Validate OLLAMA_MAX_LOADED_MODELS
+        if OLLAMA_MAX_LOADED_MODELS <= 0:
+            self.app_err(f"Config fault! OLLAMA_MAX_LOADED_MODELS must be a positive integer. Current value: {OLLAMA_MAX_LOADED_MODELS}")
+            messagebox.showinfo("Config fault!", "OLLAMA_MAX_LOADED_MODELS must be a positive integer")
+            error_code += 512
+
+        # Validate CUDA_VISIBLE_DEVICES
+        if CUDA_VISIBLE_DEVICES and not all(dev.isdigit() for dev in CUDA_VISIBLE_DEVICES.split(",")):
+            self.app_err(f"Config fault! CUDA_VISIBLE_DEVICES must be a comma-separated (',') list of integers. Current value: {CUDA_VISIBLE_DEVICES}")
+            messagebox.showinfo("Config fault!", "CUDA_VISIBLE_DEVICES must be a comma-separated (',') list of integers")
+            error_code += 1024
+
+        # bool check: 理论上这里不应该有错误，因为配置是程序自己弄的。但是为了防止用户自己手写json，还是检查一下。
+
+        # Validate OLLAMA_ENABLE_CUDA
+        if OLLAMA_ENABLE_CUDA not in ["0", "1", 0, 1]:
+            self.app_err(f"Config fault! OLLAMA_ENABLE_CUDA must be 0 or 1. Current value: {OLLAMA_ENABLE_CUDA}")
+            messagebox.showinfo("Config fault!", "OLLAMA_ENABLE_CUDA must be 0 or 1")
+            error_code += 2048
+
+        # Validate OLLAMA_FLASH_ATTENTION
+        if OLLAMA_FLASH_ATTENTION not in ["0", "1", 0, 1]:
+            self.app_err(f"Config fault! OLLAMA_FLASH_ATTENTION must be 0 or 1. Current value: {OLLAMA_FLASH_ATTENTION}")
+            messagebox.showinfo("Config fault!", "OLLAMA_FLASH_ATTENTION must be 0 or 1")
+            error_code += 4096
+
+        # Validate OLLAMA_USE_MLOCK
+        if OLLAMA_USE_MLOCK not in ["0", "1", 0, 1]:
+            self.app_err(f"Config fault! OLLAMA_USE_MLOCK must be 0 or 1. Current value: {OLLAMA_USE_MLOCK}")
+            messagebox.showinfo("Config fault!", "OLLAMA_USE_MLOCK must be 0 or 1")
+            error_code += 8192
+
+        # Validate OLLAMA_MULTIUSER_CACHE
+        if OLLAMA_MULTIUSER_CACHE not in ["0", "1", 0, 1]:
+            self.app_err(f"Config fault! OLLAMA_MULTIUSER_CACHE must be 0 or 1. Current value: {OLLAMA_MULTIUSER_CACHE}")
+            messagebox.showinfo("Config fault!", "OLLAMA_MULTIUSER_CACHE must be 0 or 1")
+            error_code += 16384
+
+        # Validate OLLAMA_INTEL_GPU
+        if OLLAMA_INTEL_GPU not in ["0", "1", 0, 1]:
+            self.app_err(f"Config fault! OLLAMA_INTEL_GPU must be 0 or 1. Current value: {OLLAMA_INTEL_GPU}")
+            messagebox.showinfo("Config fault!", "OLLAMA_INTEL_GPU must be 0 or 1")
+            error_code += 32768
+
+        # Validate OLLAMA_DEBUG
+        if OLLAMA_DEBUG not in ["0", "1", 0, 1]:
+            self.app_err(f"Config fault! OLLAMA_DEBUG must be 0 or 1. Current value: {OLLAMA_DEBUG}")
+            messagebox.showinfo("Config fault!", "OLLAMA_DEBUG must be 0 or 1")
+            error_code += 65536
+        return error_code
 
 
 if __name__ == "__main__":
