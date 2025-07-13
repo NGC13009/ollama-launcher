@@ -12,6 +12,105 @@ import tkinter as tk
 import re
 
 
+def colorize_gin_log_Closure():
+    """
+    闭包。
+    接收一个字符串（可能是 Gin 日志行），如果包含 "[GIN]"，
+    则对 HTTP 状态码和方法及其周围空格应用 ANSI 背景色 (不包括 '|' 符号)。
+
+    参数:
+        log_line (str): 输入的日志字符串。
+
+    返回:
+        str: 带有 ANSI 颜色代码的字符串，或者如果输入不含 "[GIN]" 则返回原字符串。
+    """
+
+    BG_GREEN = "\x1b[42m"
+    BG_YELLOW = "\x1b[43m"
+    BG_RED = "\x1b[41m"
+    BG_BLUE = "\x1b[44m"
+    BG_CYAN = "\x1b[46m"
+    BG_MAGENTA = "\x1b[45m"
+    BG_WHITE = "\x1b[47m"
+    BG_DEFAULT = "\x1b[49m"
+    RESET = "\x1b[0m"
+
+    def get_status_color(status_code_str):
+        """根据 HTTP 状态码字符串返回合适的 ANSI 背景色代码。"""
+        # (此函数保持不变)
+        try:
+            code = int(status_code_str)
+            if 100 <= code < 200: return BG_BLUE
+            elif 200 <= code < 300: return BG_GREEN
+            elif 300 <= code < 400: return BG_CYAN
+            elif 400 <= code < 500: return BG_YELLOW
+            elif 500 <= code < 600: return BG_RED
+            else: return BG_WHITE
+        except ValueError:
+            return BG_WHITE
+
+    def get_method_color(method_str):
+        """根据 HTTP 方法字符串返回合适的 ANSI 背景色代码。"""
+        colors = {
+            "GET": BG_BLUE,
+            "POST": BG_GREEN,
+            "PUT": BG_YELLOW,
+            "DELETE": BG_RED,
+            "PATCH": BG_MAGENTA,
+            "HEAD": BG_CYAN,
+            "OPTIONS": BG_WHITE,
+        }
+        return colors.get(method_str, BG_WHITE)
+
+    def replace_method_modified(match):
+        pipe_and_leading_spaces = match.group(1) # 例: "| "
+        method = match.group(2)                  # 例: "GET"
+        trailing_spaces = match.group(3)         # 例: "      "
+
+        leading_spaces = pipe_and_leading_spaces[1:] # 提取第一个'|'后面的空格
+
+        color = get_method_color(method)
+
+        # 构造替换字符串: 第一个'|' + 颜色开始 + 前导空格 + 方法 + 尾随空格 + 颜色重置
+        return f"|{color}{leading_spaces}{method}{trailing_spaces}{RESET}"
+
+    def replace_status_modified(match):
+        pipe_and_leading_spaces = match.group(1)  # 例: "|  "
+        status_code = match.group(2)              # 例: "200"
+        trailing_spaces_and_pipe = match.group(3) # 例: "  |"
+
+        leading_spaces = pipe_and_leading_spaces[1:]    # 提取第一个'|'后面的空格
+        trailing_spaces = trailing_spaces_and_pipe[:-1] # 提取最后一个'|'前面的空格
+
+        color = get_status_color(status_code)
+
+        # 构造替换字符串: 第一个'|' + 颜色开始 + 前导空格 + 状态码 + 尾随空格 + 颜色重置 + 第二个'|'
+        return f"|{color}{leading_spaces}{status_code}{trailing_spaces}{RESET}|"
+
+    status_pattern_original = r'(\|\s*)(\d{3})(\s*\|)'
+    method_pattern_original = r'(\|\s*)(\b(?:GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)\b)(\s+)'
+
+    def color_line(log_line):
+        if "[GIN]" not in log_line:
+            return log_line
+
+        log_line = re.sub(status_pattern_original, replace_status_modified, log_line)
+        log_line = re.sub(method_pattern_original, replace_method_modified, log_line)
+        return log_line
+
+    return color_line
+
+
+colorize_gin_log = colorize_gin_log_Closure()
+
+
+def validate_spinbox(value_if_allowed):
+    """数字输入框不能出现乱七八糟的东西"""
+    if value_if_allowed == "":
+        return True
+    return bool(re.fullmatch(r"^-?\d*$", value_if_allowed))
+
+
 def is_valid_host_port(host_string: str) -> bool:
     """
     校验一个字符串是否是合法的 'ip:port' 或 'hostname:port' 格式。

@@ -59,7 +59,7 @@ DEFAULT_SETTINGS = {
         "OLLAMA_HOST": "127.0.0.1:11434",                              # ip:port
         "OLLAMA_ORIGINS": "*",                                         # 域名
         "OLLAMA_CONTEXT_LENGTH": "2048",                               # 正整数
-        "OLLAMA_KV_CACHE_TYPE": "q8_0",                                # 可选类型: f16, q8_0, q4_0
+        "OLLAMA_KV_CACHE_TYPE": "f16",                                 # 可选类型: f16, q8_0, q4_0
         "OLLAMA_KEEP_ALIVE": "-1",                                     # 整数
         "OLLAMA_MAX_QUEUE": "512",                                     # 正整数
         "OLLAMA_NUM_PARALLEL": "1",                                    # 正整数
@@ -78,16 +78,6 @@ DEFAULT_SETTINGS = {
 
 
 class OllamaLauncherGUI:
-
-    BG_GREEN = "\x1b[42m"
-    BG_YELLOW = "\x1b[43m"
-    BG_RED = "\x1b[41m"
-    BG_BLUE = "\x1b[44m"
-    BG_CYAN = "\x1b[46m"
-    BG_MAGENTA = "\x1b[45m"
-    BG_WHITE = "\x1b[47m"
-    BG_DEFAULT = "\x1b[49m"
-    RESET = "\x1b[0m"
 
     # Ollama 更新检查 API 地址
     UPDATE_CHECK_URL_BASE = "https://ollama.com/api/update"
@@ -199,7 +189,7 @@ class OllamaLauncherGUI:
                 except (ValueError, TypeError):
                     init_val = 0
                 self.vars[key] = tk.IntVar(value=init_val)
-                vcmd = self.root.register(self.validate_spinbox)
+                vcmd = self.root.register(validate_spinbox)
                 spinbox = ttk.Spinbox(env_frame, textvariable=self.vars[key], from_=0, to=1048576, width=28, validate="key", validatecommand=(vcmd, "%P"))
                 spinbox.grid(row=row_num, column=1, columnspan=2, sticky=(tk.W, tk.E), padx=5, pady=2)
             else:                                                                                                         # 其他就正常文本框
@@ -335,12 +325,6 @@ class OllamaLauncherGUI:
             self.start_ollama()
             self.root.after(100, self.hide_window) # Slightly longer delay
         self.welcome_text()
-
-    def validate_spinbox(self, value_if_allowed):
-        # 数字输入框不能出现乱七八糟的东西
-        if value_if_allowed == "":
-            return True
-        return bool(re.fullmatch(r"^-?\d*$", value_if_allowed))
 
     def welcome_text(self):
         self.app_info("-+++-----------------------------------------------+++-")
@@ -645,7 +629,7 @@ class OllamaLauncherGUI:
             self.app_err(f"Error when copy help document to clipboard: {e}")
 
     def update_log(self, message):
-        message = self.colorize_gin_log(message)
+        message = colorize_gin_log(message)
         self.log_widget.write_ansi(message)
         print(message, end='', flush=True)
 
@@ -1054,87 +1038,6 @@ class OllamaLauncherGUI:
         editor_window.grab_set()             # Make the editor window modal (prevents interaction with main window)
         self.root.wait_window(editor_window) # Wait until the editor window is closed
         self.app_info(f"Updated self.user_env: {self.user_env}")
-
-    def get_status_color(self, status_code_str):
-        """根据 HTTP 状态码字符串返回合适的 ANSI 背景色代码。"""
-        # (此函数保持不变)
-        try:
-            code = int(status_code_str)
-            if 100 <= code < 200: return self.BG_BLUE
-            elif 200 <= code < 300: return self.BG_GREEN
-            elif 300 <= code < 400: return self.BG_CYAN
-            elif 400 <= code < 500: return self.BG_YELLOW
-            elif 500 <= code < 600: return self.BG_RED
-            else: return self.BG_WHITE
-        except ValueError:
-            return self.BG_WHITE
-
-    def get_method_color(self, method_str):
-        """根据 HTTP 方法字符串返回合适的 ANSI 背景色代码。"""
-        colors = {
-            "GET": self.BG_BLUE,
-            "POST": self.BG_GREEN,
-            "PUT": self.BG_YELLOW,
-            "DELETE": self.BG_RED,
-            "PATCH": self.BG_MAGENTA,
-            "HEAD": self.BG_CYAN,
-            "OPTIONS": self.BG_WHITE,
-        }
-        return colors.get(method_str, self.BG_WHITE)
-
-    def colorize_gin_log(self, log_line):
-        """
-        接收一个字符串（可能是 Gin 日志行），如果包含 "[GIN]"，
-        则对 HTTP 状态码和方法及其周围空格应用 ANSI 背景色 (不包括 '|' 符号)。
-
-        参数:
-            log_line (str): 输入的日志字符串。
-
-        返回:
-            str: 带有 ANSI 颜色代码的字符串，或者如果输入不含 "[GIN]" 则返回原字符串。
-        """
-        if "[GIN]" not in log_line:
-            return log_line
-
-        colored_line = log_line
-
-        # 1. 查找并着色状态码字段 (空格 + 数字 + 空格)
-        # 使用原正则表达式分离各部分
-        status_pattern_original = r'(\|\s*)(\d{3})(\s*\|)'
-
-        def replace_status_modified(match):
-            pipe_and_leading_spaces = match.group(1)  # 例: "|  "
-            status_code = match.group(2)              # 例: "200"
-            trailing_spaces_and_pipe = match.group(3) # 例: "  |"
-
-            leading_spaces = pipe_and_leading_spaces[1:]    # 提取第一个'|'后面的空格
-            trailing_spaces = trailing_spaces_and_pipe[:-1] # 提取最后一个'|'前面的空格
-
-            color = self.get_status_color(status_code)
-
-            # 构造替换字符串: 第一个'|' + 颜色开始 + 前导空格 + 状态码 + 尾随空格 + 颜色重置 + 第二个'|'
-            return f"|{color}{leading_spaces}{status_code}{trailing_spaces}{self.RESET}|"
-
-        colored_line = re.sub(status_pattern_original, replace_status_modified, colored_line)
-
-        # 2. 查找并着色 HTTP 方法字段 (空格 + 方法 + 空格)
-        method_pattern_original = r'(\|\s*)(\b(?:GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)\b)(\s+)'
-
-        def replace_method_modified(match):
-            pipe_and_leading_spaces = match.group(1) # 例: "| "
-            method = match.group(2)                  # 例: "GET"
-            trailing_spaces = match.group(3)         # 例: "      "
-
-            leading_spaces = pipe_and_leading_spaces[1:] # 提取第一个'|'后面的空格
-
-            color = self.get_method_color(method)
-
-            # 构造替换字符串: 第一个'|' + 颜色开始 + 前导空格 + 方法 + 尾随空格 + 颜色重置
-            return f"|{color}{leading_spaces}{method}{trailing_spaces}{self.RESET}"
-
-        colored_line = re.sub(method_pattern_original, replace_method_modified, colored_line)
-
-        return colored_line
 
     def open_git_webpage(self):
         webbrowser.open_new(GITLINK)
