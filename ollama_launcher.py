@@ -91,13 +91,13 @@ class OllamaLauncherGUI:
         self.user_env = dict()
         self.root = root
         bg_color = "#efefef"
+        fg_color = '#1e1e1e'
         root.configure(bg=bg_color)
 
         self.root.title("Ollama Launcher")
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
-        # Increased minsize to better accommodate the side-by-side layout
-        self.root.minsize(1024, 752)
-        self.root.geometry("1024x752") # Adjusted default size
+        self.root.minsize(1024, 756)
+        self.root.geometry("1024x756")
 
         try:
             icon_bytes = base64.b64decode(icon_base64_data)
@@ -125,8 +125,9 @@ class OllamaLauncherGUI:
             self.start_tray_thread()
 
         # --- Style ---
-        style = ttk.Style()
+        style = ttk.Style(root)
         style.theme_use('clam') # Or 'alt', 'default', 'classic'
+        style.configure('.', background=bg_color, foreground=fg_color)
 
         # --- Main Frame ---
         # 从这里开始是窗口布局相关的配置
@@ -192,7 +193,29 @@ class OllamaLauncherGUI:
                 vcmd = self.root.register(validate_spinbox)
                 spinbox = ttk.Spinbox(env_frame, textvariable=self.vars[key], from_=0, to=1048576, width=28, validate="key", validatecommand=(vcmd, "%P"))
                 spinbox.grid(row=row_num, column=1, columnspan=2, sticky=(tk.W, tk.E), padx=5, pady=2)
-            else:                                                                                                         # 其他就正常文本框
+
+            elif key == "OLLAMA_KV_CACHE_TYPE": # --- 特定字符串选项 (String Choice) 使用下拉菜单 (Combobox) ---
+                self.vars[key] = tk.StringVar(value=default_value)
+                options = ["f16", "q8_0", "q4_0"]
+
+                if default_value not in options:
+                    self.vars[key].set(options[0])
+
+                try:
+                    style.theme_use('clam')
+                except tk.TclError:
+                    pass
+
+                style.map("Custom.TCombobox",
+                          fieldbackground=[('readonly', 'white')],
+                          foreground=[('readonly', 'black')],
+                          selectbackground=[('readonly', 'white')],
+                          selectforeground=[('readonly', 'black')])
+
+                combobox = ttk.Combobox(env_frame, textvariable=self.vars[key], values=options, state="readonly", width=28, style="Custom.TCombobox")
+                combobox.grid(row=row_num, column=1, columnspan=2, sticky=(tk.W, tk.E), padx=5, pady=2)
+
+            else:  # 其他就正常文本框
                 self.vars[key] = tk.StringVar(value=default_value)
                 ttk.Entry(env_frame, textvariable=self.vars[key], width=30).grid(row=row_num, column=1, columnspan=2, sticky=(tk.W, tk.E), padx=5, pady=2)
             row_num += 1
@@ -219,8 +242,9 @@ class OllamaLauncherGUI:
         button_frame.columnconfigure((0, 1, 2, 3, 4), weight=1)
 
         self.style = ttk.Style()
-        self.style.configure('Start.TButton', background='#00aa00')
-        self.style.configure('Stop.TButton', background='#aa0000')
+        self.style.configure('Start.TButton', background="#42d39b")
+        self.style.configure('Stop.TButton', background="#fc7c7c")
+        self.style.configure('Hide.TButton', background="#6ea8e6")
 
         self.start_button = ttk.Button(button_frame, text="Ollama Run", command=self.start_ollama, style='Start.TButton')
         self.start_button.grid(row=0, column=0, padx=2, sticky='ew')
@@ -234,7 +258,7 @@ class OllamaLauncherGUI:
         self.clear_log_button_widget = ttk.Button(button_frame, text="Clear Log", command=self.clear_log)
         self.clear_log_button_widget.grid(row=0, column=3, padx=2, sticky='ew')
 
-        self.hide_button = ttk.Button(button_frame, text="Hide to tray", command=self.hide_window)
+        self.hide_button = ttk.Button(button_frame, text="Hide to tray", command=self.hide_window, style='Hide.TButton')
         self.hide_button.grid(row=0, column=4, padx=2, sticky='ew')
 
         # --- Status Bar (Inside Left Panel) ---
@@ -1325,31 +1349,31 @@ class OllamaLauncherGUI:
             OLLAMA_DEBUG = vars['OLLAMA_DEBUG'].get()
         except Exception as e:
             self.app_err(f"Check fault! Error somewhere when loading config variables: {e}")
-            messagebox.showinfo("Check fault!", f"Error somewhere when loading config variables: {e}")
+            messagebox.showerror("Check fault!", f"Error somewhere when loading config variables: {e}")
             error_code = 131072
             return error_code
 
         # Validate ollama_exe_path
         if (not ollama_exe_path) or (not os.path.isfile(ollama_exe_path)):
             self.app_err(f"Config fault! ollama_exe_path file not found: {ollama_exe_path}.")
-            messagebox.showinfo("Config fault!", f"ollama_exe_path file not found: {ollama_exe_path}")
+            messagebox.showerror("Config fault!", f"ollama_exe_path file not found: {ollama_exe_path}")
             error_code += 1
         # Validate OLLAMA_MODELS
         if (not OLLAMA_MODELS) or (not os.path.isdir(OLLAMA_MODELS)):
             self.app_err(f"Config fault! OLLAMA_MODELS directory not found: {OLLAMA_MODELS}.")
-            messagebox.showinfo("Config fault!", f"OLLAMA_MODELS directory not found: {OLLAMA_MODELS}")
+            messagebox.showerror("Config fault!", f"OLLAMA_MODELS directory not found: {OLLAMA_MODELS}")
             error_code += 2
 
         # Validate OLLAMA_TMPDIR
         if (not OLLAMA_TMPDIR) or (not os.path.isdir(OLLAMA_TMPDIR)):
             self.app_err(f"Config fault! OLLAMA_TMPDIR directory not found: {OLLAMA_TMPDIR}.")
-            messagebox.showinfo("Config fault!", f"OLLAMA_TMPDIR directory not found: {OLLAMA_TMPDIR}")
+            messagebox.showerror("Config fault!", f"OLLAMA_TMPDIR directory not found: {OLLAMA_TMPDIR}")
             error_code += 4
 
         # Validate OLLAMA_HOST
         if not is_valid_host_port(OLLAMA_HOST):
             self.app_err(f"Config fault! OLLAMA_HOST must be a valid IP:port. Current value: {OLLAMA_HOST}")
-            messagebox.showinfo("Config fault!", "OLLAMA_HOST must be a valid IP:port")
+            messagebox.showerror("Config fault!", "OLLAMA_HOST must be a valid IP:port")
             error_code += 8
 
         # Validate OLLAMA_ORIGINS
@@ -1358,13 +1382,13 @@ class OllamaLauncherGUI:
         # Validate OLLAMA_CONTEXT_LENGTH
         if OLLAMA_CONTEXT_LENGTH <= 0:
             self.app_err("fConfig fault! OLLAMA_CONTEXT_LENGTH must be a positive integer. Current value: {OLLAMA_CONTEXT_LENGTH}")
-            messagebox.showinfo("Config fault!", "OLLAMA_CONTEXT_LENGTH must be a positive integer")
+            messagebox.showerror("Config fault!", "OLLAMA_CONTEXT_LENGTH must be a positive integer")
             error_code += 16
 
         # Validate OLLAMA_KV_CACHE_TYPE
         if OLLAMA_KV_CACHE_TYPE not in ["f16", "q8_0", "q4_0"]:
             self.app_err(f"Config fault! OLLAMA_KV_CACHE_TYPE must be one of 'f16', 'q8_0', 'q4_0'. Current value: {OLLAMA_KV_CACHE_TYPE}")
-            messagebox.showinfo("Config fault!", "OLLAMA_KV_CACHE_TYPE must be one of 'f16', 'q8_0', 'q4_0'")
+            messagebox.showerror("Config fault!", "OLLAMA_KV_CACHE_TYPE must be one of 'f16', 'q8_0', 'q4_0'")
             error_code += 32
 
         # OLLAMA_KEEP_ALIVE can be "1500" or such as "5m0s"... 不弄了算了
@@ -1372,25 +1396,25 @@ class OllamaLauncherGUI:
         # Validate OLLAMA_MAX_QUEUE
         if OLLAMA_MAX_QUEUE <= 0:
             self.app_err(f"Config fault! OLLAMA_MAX_QUEUE must be a positive integer. Current value: {OLLAMA_MAX_QUEUE}")
-            messagebox.showinfo("Config fault!", "OLLAMA_MAX_QUEUE must be a positive integer")
+            messagebox.showerror("Config fault!", "OLLAMA_MAX_QUEUE must be a positive integer")
             error_code += 128
 
         # Validate OLLAMA_NUM_PARALLEL
         if int(OLLAMA_NUM_PARALLEL) <= 0:
             self.app_err(f"Config fault! OLLAMA_NUM_PARALLEL must be a positive integer. Current value: {OLLAMA_NUM_PARALLEL}")
-            messagebox.showinfo("Config fault!", "OLLAMA_NUM_PARALLEL must be a positive integer")
+            messagebox.showerror("Config fault!", "OLLAMA_NUM_PARALLEL must be a positive integer")
             error_code += 256
 
         # Validate OLLAMA_MAX_LOADED_MODELS
         if OLLAMA_MAX_LOADED_MODELS <= 0:
             self.app_err(f"Config fault! OLLAMA_MAX_LOADED_MODELS must be a positive integer. Current value: {OLLAMA_MAX_LOADED_MODELS}")
-            messagebox.showinfo("Config fault!", "OLLAMA_MAX_LOADED_MODELS must be a positive integer")
+            messagebox.showerror("Config fault!", "OLLAMA_MAX_LOADED_MODELS must be a positive integer")
             error_code += 512
 
         # Validate CUDA_VISIBLE_DEVICES
         if CUDA_VISIBLE_DEVICES and not all(dev.isdigit() for dev in CUDA_VISIBLE_DEVICES.split(",")):
             self.app_err(f"Config fault! CUDA_VISIBLE_DEVICES must be a comma-separated (',') list of integers. Current value: {CUDA_VISIBLE_DEVICES}")
-            messagebox.showinfo("Config fault!", "CUDA_VISIBLE_DEVICES must be a comma-separated (',') list of integers")
+            messagebox.showerror("Config fault!", "CUDA_VISIBLE_DEVICES must be a comma-separated (',') list of integers")
             error_code += 1024
 
         # bool check: 理论上这里不应该有错误，因为配置是程序自己弄的。但是为了防止用户自己手写json，还是检查一下。
@@ -1398,37 +1422,37 @@ class OllamaLauncherGUI:
         # Validate OLLAMA_ENABLE_CUDA
         if OLLAMA_ENABLE_CUDA not in ["0", "1", 0, 1]:
             self.app_err(f"Config fault! OLLAMA_ENABLE_CUDA must be 0 or 1. Current value: {OLLAMA_ENABLE_CUDA}")
-            messagebox.showinfo("Config fault!", "OLLAMA_ENABLE_CUDA must be 0 or 1")
+            messagebox.showerror("Config fault!", "OLLAMA_ENABLE_CUDA must be 0 or 1")
             error_code += 2048
 
         # Validate OLLAMA_FLASH_ATTENTION
         if OLLAMA_FLASH_ATTENTION not in ["0", "1", 0, 1]:
             self.app_err(f"Config fault! OLLAMA_FLASH_ATTENTION must be 0 or 1. Current value: {OLLAMA_FLASH_ATTENTION}")
-            messagebox.showinfo("Config fault!", "OLLAMA_FLASH_ATTENTION must be 0 or 1")
+            messagebox.showerror("Config fault!", "OLLAMA_FLASH_ATTENTION must be 0 or 1")
             error_code += 4096
 
         # Validate OLLAMA_USE_MLOCK
         if OLLAMA_USE_MLOCK not in ["0", "1", 0, 1]:
             self.app_err(f"Config fault! OLLAMA_USE_MLOCK must be 0 or 1. Current value: {OLLAMA_USE_MLOCK}")
-            messagebox.showinfo("Config fault!", "OLLAMA_USE_MLOCK must be 0 or 1")
+            messagebox.showerror("Config fault!", "OLLAMA_USE_MLOCK must be 0 or 1")
             error_code += 8192
 
         # Validate OLLAMA_MULTIUSER_CACHE
         if OLLAMA_MULTIUSER_CACHE not in ["0", "1", 0, 1]:
             self.app_err(f"Config fault! OLLAMA_MULTIUSER_CACHE must be 0 or 1. Current value: {OLLAMA_MULTIUSER_CACHE}")
-            messagebox.showinfo("Config fault!", "OLLAMA_MULTIUSER_CACHE must be 0 or 1")
+            messagebox.showerror("Config fault!", "OLLAMA_MULTIUSER_CACHE must be 0 or 1")
             error_code += 16384
 
         # Validate OLLAMA_INTEL_GPU
         if OLLAMA_INTEL_GPU not in ["0", "1", 0, 1]:
             self.app_err(f"Config fault! OLLAMA_INTEL_GPU must be 0 or 1. Current value: {OLLAMA_INTEL_GPU}")
-            messagebox.showinfo("Config fault!", "OLLAMA_INTEL_GPU must be 0 or 1")
+            messagebox.showerror("Config fault!", "OLLAMA_INTEL_GPU must be 0 or 1")
             error_code += 32768
 
         # Validate OLLAMA_DEBUG
         if OLLAMA_DEBUG not in ["0", "1", 0, 1]:
             self.app_err(f"Config fault! OLLAMA_DEBUG must be 0 or 1. Current value: {OLLAMA_DEBUG}")
-            messagebox.showinfo("Config fault!", "OLLAMA_DEBUG must be 0 or 1")
+            messagebox.showerror("Config fault!", "OLLAMA_DEBUG must be 0 or 1")
             error_code += 65536
         return error_code
 

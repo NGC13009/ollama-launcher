@@ -182,37 +182,37 @@ class AnsiColorText(tk.Text):
             '24': {'underline': False},                       # Not underlined
 
             # Foreground colors (30-37)
-            '30': {'foreground': '#2e3436'},  # Black (use dark gray)
-            '31': {'foreground': '#cc0000'},  # Red
-            '32': {'foreground': '#4e9a06'},  # Green
-            '33': {'foreground': '#c4a000'},  # Yellow
-            '34': {'foreground': '#3465a4'},  # Blue
-            '35': {'foreground': '#75507b'},  # Magenta
-            '36': {'foreground': '#06989a'},  # Cyan
-            '37': {'foreground': '#d3d7cf'},  # White (use light gray)
+            '30': {'foreground': '#1e1e1e'},  # Black (use dark gray)
+            '31': {'foreground': '#cd3131'},  # Red
+            '32': {'foreground': '#0dbc79'},  # Green
+            '33': {'foreground': '#e5e510'},  # Yellow
+            '34': {'foreground': '#4e8fd4'},  # Blue
+            '35': {'foreground': '#bc3fbc'},  # Magenta
+            '36': {'foreground': '#11a8cd'},  # Cyan
+            '37': {'foreground': '#e5e5e5'},  # White (use light gray)
             '39': {'foreground': default_fg}, # Default foreground
 
             # --- 添加亮色前景 (90-97) ---
-            '90': {'foreground': '#555753'},  # Bright Black (darker gray)
-            '91': {'foreground': '#ef2929'},  # Bright Red
-            '92': {'foreground': '#8ae234'},  # Bright Green
-            '93': {'foreground': '#fce94f'},  # Bright Yellow
-            '94': {'foreground': '#729fcf'},  # Bright Blue
-            '95': {'foreground': '#ad7fa8'},  # Bright Magenta
-            '96': {'foreground': '#34e2e2'},  # Bright Cyan
-            '97': {'foreground': '#eeeeec'},  # Bright White
+            '90': {'foreground': '#1e1e1e'},  # Bright Black (darker gray)
+            '91': {'foreground': '#cd3131'},  # Bright Red
+            '92': {'foreground': '#0dbc79'},  # Bright Green
+            '93': {'foreground': '#e5e510'},  # Bright Yellow
+            '94': {'foreground': "#4e8fd4"},  # Bright Blue
+            '95': {'foreground': '#bc3fbc'},  # Bright Magenta
+            '96': {'foreground': '#11a8cd'},  # Bright Cyan
+            '97': {'foreground': '#e5e5e5'},  # Bright White
 
             # Background colors (40-47)
-            '40': {'background': '#2e3436'},  # Black background
-            '41': {'background': '#cc0000'},  # Red background
-            '42': {'background': '#4e9a06'},  # Green background
-            '43': {'background': '#c4a000'},  # Yellow background
-            '44': {'background': '#3465a4'},  # Blue background
-            '45': {'background': '#75507b'},  # Magenta background
-            '46': {'background': '#06989a'},  # Cyan background
-            '47': {'background': '#d3d7cf'},  # White background
+            '40': {'background': '#1e1e1e'},  # Black background
+            '41': {'background': '#cd3131'},  # Red background
+            '42': {'background': '#0dbc79'},  # Green background
+            '43': {'background': '#e5e510'},  # Yellow background
+            '44': {'background': '#4e8fd4'},  # Blue background
+            '45': {'background': '#bc3fbc'},  # Magenta background
+            '46': {'background': '#11a8cd'},  # Cyan background
+            '47': {'background': '#e5e5e5'},  # White background
             '49': {'background': default_bg},  # Default background
-            'sel' : {'background': '#4444ee', 'foreground': '#efefef'},  # 选中时的样式
+            'sel' : {'background': '#264f78', 'foreground': '#efefef'},  # 选中时的样式
         }
         # yapf: enable
 

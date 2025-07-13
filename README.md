@@ -178,6 +178,8 @@ Please contact the author or submit an issue if you encounter problems or want t
 22. [o]自动换行
 23. [o]相关网页增加打开快速链接
 24. [o]修复子进程不正常退出的bug
-25. []检查配置
-26. []防止输入错误的配置到一些输入框
+25. [o]检查配置
+26. [o]防止输入错误的配置到一些输入框
+27. [o]舒适颜色
+28. []重写教程
 
