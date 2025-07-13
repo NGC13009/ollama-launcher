@@ -52,28 +52,28 @@ CONFIG_PATH = os.path.join(SCRIPT_DIR, CONFIG_FILE)
 
 # 默认配置
 DEFAULT_SETTINGS = {
-    "ollama_exe_path": "C:/application/ollama/OLLAMA_FILE/ollama.exe",
+    "ollama_exe_path": "C:/application/ollama/OLLAMA_FILE/ollama.exe", # 文件路径
     "variables": {
-        "OLLAMA_MODELS": "E:/LLM/ollama_models",
-        "OLLAMA_TMPDIR": "E:/LLM/ollama_models/temp",
-        "OLLAMA_HOST": "127.0.0.1:11434",
-        "OLLAMA_ORIGINS": "*",
-        "OLLAMA_CONTEXT_LENGTH": "2048",
-        "OLLAMA_KV_CACHE_TYPE": "q8_0",
-        "OLLAMA_KEEP_ALIVE": "-1",
-        "OLLAMA_MAX_QUEUE": "512",
-        "OLLAMA_NUM_PARALLEL": "1",
-        "OLLAMA_MAX_LOADED_MODELS":"4",
-        "OLLAMA_ENABLE_CUDA": "1",
-        "CUDA_VISIBLE_DEVICES": "0",
-        "OLLAMA_FLASH_ATTENTION": "1",
-        "OLLAMA_USE_MLOCK": "1",
-        "OLLAMA_MULTIUSER_CACHE": "0",
-        "OLLAMA_INTEL_GPU": "0",
-        "OLLAMA_DEBUG": "0",
+        "OLLAMA_MODELS": "E:/LLM/ollama_models",                       # 路径
+        "OLLAMA_TMPDIR": "E:/LLM/ollama_models/temp",                  # 路径
+        "OLLAMA_HOST": "127.0.0.1:11434",                              # ip:port
+        "OLLAMA_ORIGINS": "*",                                         # 域名
+        "OLLAMA_CONTEXT_LENGTH": "2048",                               # 正整数
+        "OLLAMA_KV_CACHE_TYPE": "q8_0",                                # 可选类型: f16, q8_0, q4_0
+        "OLLAMA_KEEP_ALIVE": "-1",                                     # 整数
+        "OLLAMA_MAX_QUEUE": "512",                                     # 正整数
+        "OLLAMA_NUM_PARALLEL": "1",                                    # 正整数
+        "OLLAMA_MAX_LOADED_MODELS": "4",                               # 正整数
+        "OLLAMA_ENABLE_CUDA": "1",                                     # 0或1
+        "CUDA_VISIBLE_DEVICES": "0",                                   # 英文逗号分隔的正整数
+        "OLLAMA_FLASH_ATTENTION": "1",                                 # 0或1
+        "OLLAMA_USE_MLOCK": "1",                                       # 0或1
+        "OLLAMA_MULTIUSER_CACHE": "0",                                 # 0或1
+        "OLLAMA_INTEL_GPU": "0",                                       # 0或1
+        "OLLAMA_DEBUG": "0",                                           # 0或1
     },
     "start_minimized": False,
-    "user_env": {}
+    "user_env": {}                                                     # 字典，包含环境变量name和var
 }
 
 
@@ -87,7 +87,7 @@ class AnsiColorText(tk.Text):
         kwargs.setdefault('background', default_bg)
         kwargs.setdefault('foreground', default_fg)
         kwargs.setdefault('insertbackground', 'white')
-        kwargs.setdefault('state', tk.NORMAL)  # 修改为 NORMAL
+        kwargs.setdefault('state', tk.NORMAL) # 修改为 NORMAL
 
         super().__init__(master, **kwargs)
 
@@ -169,7 +169,7 @@ class AnsiColorText(tk.Text):
         Manages widget state (NORMAL/DISABLED) and scrolling.
         """
         self.config(state=tk.NORMAL) # Enable writing
-        
+
         # 判断插入前是否贴底
         was_at_bottom = (self.yview()[1] == 1.0)
 
@@ -184,9 +184,9 @@ class AnsiColorText(tk.Text):
                 # This is plain text
                 # Determine tags based on active codes, excluding '0' unless it's the only one
                 current_tags = tuple(f"ansi_{code}" for code in self.active_codes if code != '0')
-                self.insert(tk.END, part, current_tags + ("sel",))  # 添加 sel 标签
+                self.insert(tk.END, part, current_tags + ("sel", )) # 添加 sel 标签
             else:
-                # This is ANSI code
+                                                                    # This is ANSI code
                 codes = part.split(';')
                 needs_reset = False
                 new_codes_in_sequence = set()
@@ -227,16 +227,16 @@ class AnsiColorText(tk.Text):
         # 插入完成后，根据贴底状态决定是否滚动到底部
         if was_at_bottom:
             self.see(tk.END)
-        
+
     def copy_selection(self, event):
         """复制选中的文本到剪贴板."""
         try:
             selected_text = self.get(tk.SEL_FIRST, tk.SEL_LAST)
             self.clipboard_clear()
             self.clipboard_append(selected_text)
-            return "break"  # 阻止默认行为
+            return "break" # 阻止默认行为
         except tk.TclError:
-            # 没有选中内容
+                           # 没有选中内容
             return "break"
 
 
@@ -426,8 +426,8 @@ class OllamaLauncherGUI:
         v_scrollbar = ttk.Scrollbar(log_frame, orient=tk.VERTICAL, command=self.log_widget.yview)
         v_scrollbar.grid(row=0, column=1, sticky=(tk.N, tk.S))
         self.log_widget.configure(yscrollcommand=v_scrollbar.set)
-        self.log_widget.config(state=tk.NORMAL)  # 允许选中/复制
-        self.log_widget.bind("<Key>", lambda e: "break")  # 阻止用户输入
+        self.log_widget.config(state=tk.NORMAL)          # 允许选中/复制
+        self.log_widget.bind("<Key>", lambda e: "break") # 阻止用户输入
         self.log_widget.bind("<Control-c>", self.log_widget.copy_selection)
 
         # --- Load Initial Settings & Start Log Processing ---
@@ -521,7 +521,7 @@ class OllamaLauncherGUI:
         text_area = scrolledtext.ScrolledText(help_window, wrap=tk.WORD, width=80, height=20, bg=bg_color, fg="#1e1e1e", bd=0, highlightthickness=0)
         text_area.pack(padx=10, pady=10, expand=True, fill=tk.BOTH)
         text_area.insert(tk.END, HELP_TEXT)
-        text_area.config(state=tk.DISABLED)  # 禁止用户编辑
+        text_area.config(state=tk.DISABLED) # 禁止用户编辑
 
         # 允许用户选中和复制文本
         text_area.tag_configure("selectable", selectforeground="black", selectbackground="lightgray")
@@ -916,13 +916,13 @@ class OllamaLauncherGUI:
             self.start_button.config(state=tk.NORMAL)
             self.stop_button.config(state=tk.DISABLED)
                             # Threads reading pipes should exit automatically as pipes close
-    def psutil_terminate(self,proc_pid):
+    def psutil_terminate(self, proc_pid):
         parent_proc = psutil.Process(proc_pid)
         for child_proc in parent_proc.children(recursive=True):
             self.app_info(f"terminate proc PID: {child_proc.ppid()} ...")
             child_proc.terminate()
         parent_proc.terminate()
-    
+
     def stop_ollama(self):
         if not self.is_running or not self.ollama_process:
             self.is_running = False # Ensure state consistency
@@ -979,13 +979,11 @@ class OllamaLauncherGUI:
         self.app_info('exit...')
         self.app_time()
         if self.is_running:
-            result = messagebox.askyesnocancel(
-                    "Note", 
-                    "Do you really want to EXIT?", 
-                    detail="Ollama server is running.\nIf you want to stop ollama deamon & exit, choose Yes.\nIf you want to hidden the window to tray, choose NO.", 
-                    icon=messagebox.WARNING, 
-                    default=messagebox.CANCEL
-                )
+            result = messagebox.askyesnocancel("Note",
+                                               "Do you really want to EXIT?",
+                                               detail="Ollama server is running.\nIf you want to stop ollama deamon & exit, choose Yes.\nIf you want to hidden the window to tray, choose NO.",
+                                               icon=messagebox.WARNING,
+                                               default=messagebox.CANCEL)
             if result == True:
                 self.app_info("stop ollama.exe...")
                 self.stop_ollama()
@@ -1001,7 +999,7 @@ class OllamaLauncherGUI:
             elif result == False:
                 self.hide_window()
                 return
-            else: # return None
+            else:  # return None
                 return
 
         else:
@@ -1299,8 +1297,10 @@ class OllamaLauncherGUI:
     def get_platform_details_msgbox(self):
         a = self.get_platform_details()
         ollama_version = self.get_ollama_version()
-        messagebox.showinfo("System platfrom",f"os={a["os"]}\narch={a["arch"]}\nollama={ollama_version}")
-        
+        os = a["os"]
+        arch = a["arch"]
+        messagebox.showinfo("System platfrom", f"os={a}\narch={arch}\nollama={ollama_version}")
+
     def get_ollama_platform_archive_url(self, current_version="0.0.0") -> Optional[str]:
         self.app_info(f"UPDATE_CHECK_URL_BASE: {self.UPDATE_CHECK_URL_BASE}")
         platform_info = self.get_platform_details()
@@ -1387,7 +1387,7 @@ class OllamaLauncherGUI:
                     # --- 第四步：构建最终的 GitHub 下载 URL ---
                     final_download_url = self.GITHUB_DOWNLOAD_URL_TEMPLATE.format(version_tag=version_tag, filename=target_filename)
                     self.app_info(f"Final download URL: {final_download_url}")
-                    return (final_download_url,version_tag) # 返回构建好的 URL 字符串
+                    return (final_download_url, version_tag) # 返回构建好的 URL 字符串
 
                 except requests.exceptions.JSONDecodeError:
                     self.app_err("Unable to parse the JSON content of the server response. Update terminate.")
@@ -1417,10 +1417,11 @@ class OllamaLauncherGUI:
         if ret is None:
             self.app_err("Error occurred while processing update response or building URL. Update terminate.")
             return
-        url,version_tag = ret
+        url, version_tag = ret
         ollama_version = self.get_ollama_version()
-        
-        if messagebox.askyesno("Ollama download", f"The latest ollama version is {version_tag}. \nCurrent Version is {ollama_version}.\nWould you want to open web browser to download it?\nURL: {url}"):
+
+        if messagebox.askyesno("Ollama download",
+                               f"The latest ollama version is {version_tag}. \nCurrent Version is {ollama_version}.\nWould you want to open web browser to download it?\nURL: {url}"):
             self.app_info("Ollama update: open the URL in web browser.")
             webbrowser.open_new(url)
         else:
@@ -1438,23 +1439,17 @@ class OllamaLauncherGUI:
         ollama_path = self.vars['ollama_exe_path'].get()
 
         try:
-            command = [ollama_path, "-v"] 
-            result = subprocess.run(
-                command,
-                capture_output=True,  
-                text=True,            
-                check=True,           
-                encoding='utf-8'      
-            )
+            command = [ollama_path, "-v"]
+            result = subprocess.run(command, capture_output=True, text=True, check=True, encoding='utf-8')
 
-            output = result.stdout.strip() 
+            output = result.stdout.strip()
 
             match = re.search(r"(?:ollama version is|client version is)\s+([\d\.]+)", output)
-            
+
             if match:
-                version = match.group(1) 
-                self.app_info(f"Ollama version tag: '{version}'") 
-                return version 
+                version = match.group(1)
+                self.app_info(f"Ollama version tag: '{version}'")
+                return version
             else:
                 self.app_err(f"Can not get the version tag from stdout. Output was: '{output}'")
                 return None
@@ -1468,7 +1463,7 @@ class OllamaLauncherGUI:
                 self.app_err(f"stdout: {e.stdout.strip()}")
             if e.stderr:
                 self.app_err(f"stderr: {e.stderr.strip()}")
-            return None 
+            return None
         except Exception as e:
             self.app_err(f"An unknown error occurred: {e}")
             return None
@@ -1480,8 +1475,8 @@ class OllamaLauncherGUI:
             return
         else:
             messagebox.showinfo("Ollama Version", f"The version of Ollama is: {version}")
-            return 
-    
+            return
+
     def open_ollama_path(self):
         file_path_str = self.vars['ollama_exe_path'].get()
         try:
@@ -1493,12 +1488,12 @@ class OllamaLauncherGUI:
                 else:
                     self.app_err(f"Can not get the correct file path from : '{file_path_str}' ") # 输出错误提示
                     return
-            
+
             # 3. 检查提取的目录路径是否存在
-            if not os.path.exists(directory_path): # 检查目录是否存在
+            if not os.path.exists(directory_path):                    # 检查目录是否存在
                 self.app_err(f"path not exist : '{directory_path}' ") # 输出错误提示
                 return
-            
+
             if not os.path.isdir(directory_path): # 确保它确实是一个目录
                 self.app_err(f"Path is not valid : '{directory_path}' ")
                 return
@@ -1510,21 +1505,21 @@ class OllamaLauncherGUI:
 
             if current_os == "Windows":
                 # 在Windows上，os.startfile() 可以直接打开目录（在文件浏览器中）
-                os.startfile(os.path.normpath(directory_path)) # 使用 normpath 确保路径格式正确
-            elif current_os == "Darwin": # "Darwin" 是 macOS 的内核名称
-                # 在macOS上，使用 'open' 命令
-                subprocess.run(['open', directory_path], check=True) # 执行 open 命令
-            else: # 默认为 Linux 或其他类 Unix 系统
-                # 在Linux上，通常使用 'xdg-open'
+                os.startfile(os.path.normpath(directory_path))                            # 使用 normpath 确保路径格式正确
+            elif current_os == "Darwin":                                                  # "Darwin" 是 macOS 的内核名称
+                                                                                          # 在macOS上，使用 'open' 命令
+                subprocess.run(['open', directory_path], check=True)                      # 执行 open 命令
+            else:                                                                         # 默认为 Linux 或其他类 Unix 系统
+                                                                                          # 在Linux上，通常使用 'xdg-open'
                 try:
-                    subprocess.run(['xdg-open', directory_path], check=True) # 执行 xdg-open 命令
-                except FileNotFoundError: # 如果 'xdg-open' 命令未找到
-                    self.app_err(f"Detected OS = Linux. But can not find 'xdg-open'") # 输出错误信息
-                    self.app_err(f"Please open it manully: {directory_path}") # 提示手动打开
-                except subprocess.CalledProcessError as e: # 如果命令执行出错
+                    subprocess.run(['xdg-open', directory_path], check=True)              # 执行 xdg-open 命令
+                except FileNotFoundError:                                                 # 如果 'xdg-open' 命令未找到
+                    self.app_err(f"Detected OS = Linux. But can not find 'xdg-open'")     # 输出错误信息
+                    self.app_err(f"Please open it manully: {directory_path}")             # 提示手动打开
+                except subprocess.CalledProcessError as e:                                # 如果命令执行出错
                     self.app_err(f"Error occure when open '{directory_path}' with : {e}") # 输出错误信息
 
-        except Exception as e: # 捕获其他所有可能的异常
+        except Exception as e:                  # 捕获其他所有可能的异常
             self.app_err(f"Unknow error : {e}") # 输出通用错误信息
 
 
