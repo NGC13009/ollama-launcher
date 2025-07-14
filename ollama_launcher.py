@@ -6,10 +6,11 @@
 #                       打包：在当前conda环境下运行
 #                           ```
 #                           # -w 不要命令行终端， -F打包为单个文件，-i指定图标
+#                           conda activate py312
 #                           pyinstaller -w .\ollama_launcher.py -i .\favicon.ico -y
 #                           pyinstaller -w .\ollama_launcher.py -i .\favicon.ico -y --distpath C:\application\ollama  # 直接打包到某路径
 #                           ```.
-# @attention:       !! 注意，如果您的操作系统是Windows，那么打包时可能存在问题，请参考readme.md的说明
+# @attention:
 # @TODO:            None
 # @Author:          NGC13009
 # @History:         2025-05-03		Create
@@ -37,8 +38,9 @@ from typing import Optional, Callable
 import platform
 import binascii
 import psutil
+import webview
 
-from OL_resource import HELP_TEXT, VERSION, DATE, WELCONE_TEXT, icon_base64_data, INFO_TEXT, GITLINK, GITLINK_BOTTOM
+from OL_resource import *
 from utils import *
 
 has_pystray = True
@@ -94,8 +96,9 @@ class OllamaLauncherGUI:
 
         self.root.title("Ollama Launcher")
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
-        self.root.minsize(1024, 756)
-        self.root.geometry("1024x756")
+        h, w = 1450, 905
+        self.root.minsize(h, w)
+        self.root.geometry(f"{h}x{w}")
 
         try:
             icon_bytes = base64.b64decode(icon_base64_data)
@@ -407,7 +410,7 @@ class OllamaLauncherGUI:
         self.app_info("open About Page.")
         about_window = tk.Toplevel()
         about_window.title("About - Ollama Launcher")
-        about_window.geometry("400x200")
+        about_window.geometry("500x250")
         about_window.resizable(False, False)
         try:
             icon_bytes = base64.b64decode(icon_base64_data)
@@ -1457,6 +1460,11 @@ class OllamaLauncherGUI:
 
 if __name__ == "__main__":
     print('[info] run')
+    try:      # high dpi 支持
+        from ctypes import windll
+        windll.shcore.SetProcessDpiAwareness(1)
+    except ImportError:
+        pass
     root = tk.Tk()
     app = OllamaLauncherGUI(root)
     root.mainloop()
