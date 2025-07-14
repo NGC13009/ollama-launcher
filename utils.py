@@ -1,4 +1,4 @@
-# coding = utf-8
+# coding = utf-8 (Zh-CN / Simplified Chinese)
 # Arch   = manyArch
 #
 # @File name:       utils.py

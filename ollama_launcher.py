@@ -1,4 +1,4 @@
-# coding = utf-8
+# coding = utf-8 (Zh-CN / Simplified Chinese)
 # Arch   = win32
 #
 # @File name:       ollama_launcher.py
@@ -40,6 +40,7 @@ import binascii
 import psutil
 
 from OL_resource import *
+from OL_source_ico import icon_base64_data
 from utils import *
 
 has_pystray = True
@@ -89,9 +90,9 @@ class OllamaLauncherGUI:
         global has_pystray # Ensure global is accessible
         self.user_env = dict()
         self.root = root
-        bg_color = "#efefef"
-        fg_color = '#1e1e1e'
-        root.configure(bg=bg_color)
+        self.bg_color = '#efefef'
+        self.fg_color = '#1e1e1e'
+        root.configure(bg=self.bg_color)
 
         self.root.title("Ollama Launcher")
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
@@ -129,7 +130,7 @@ class OllamaLauncherGUI:
         # --- Style ---
         style = ttk.Style(root)
         style.theme_use('clam') # Or 'alt', 'default', 'classic'
-        style.configure('.', background=bg_color, foreground=fg_color)
+        style.configure('.', background=self.bg_color, foreground=self.fg_color)
 
         # --- Main Frame ---
         # 从这里开始是窗口布局相关的配置
@@ -372,22 +373,40 @@ class OllamaLauncherGUI:
         tk_icon = ImageTk.PhotoImage(self.icon)
         help_window.iconphoto(True, tk_icon)
 
-        bg_color = "#efefef"
-        help_window.configure(bg=bg_color)
-        text_area = scrolledtext.ScrolledText(help_window, wrap=tk.WORD, width=80, height=20, bg=bg_color, fg="#1e1e1e", bd=0, highlightthickness=0)
-        text_area.pack(padx=10, pady=10, expand=True, fill=tk.BOTH)
-        text_area.insert(tk.END, HELP_TEXT)
-        text_area.config(state=tk.DISABLED) # 禁止用户编辑
+        help_window.configure(bg=self.bg_color)
 
-        # 允许用户选中和复制文本
-        text_area.tag_configure("selectable", selectforeground="black", selectbackground="lightgray")
-        text_area.tag_add("selectable", "1.0", tk.END)
+        # 选项卡
+        notebook = ttk.Notebook(help_window)
+        notebook.pack(expand=True, fill='both')
+
+        help_frame = dict()
+        text_area = []
+        la_list = []
+
+        for lan, help_text in HELP_TEXT_DICT.items():
+
+            help_frame[lan] = ttk.Frame(notebook)
+            notebook.add(help_frame[lan], text=lan)
+
+            # 内容区域
+            text_cur = scrolledtext.ScrolledText(help_frame[lan], wrap=tk.WORD, width=80, height=20, bg=self.bg_color, fg=self.fg_color, bd=0, highlightthickness=0)
+            text_cur.pack(padx=10, pady=10, expand=True, fill=tk.BOTH)
+            text_cur.insert(tk.END, help_text)
+            text_cur.config(state=tk.DISABLED)
+
+            # 允许用户选中和复制文本
+            text_cur.tag_configure("selectable", selectforeground="black", selectbackground="lightgray")
+            text_cur.tag_add("selectable", "1.0", tk.END)
+
+            text_area.append(text_cur)
+            la_list.append(lan)
 
         style = ttk.Style()
-        style.configure("HelpButtonFrame.TFrame", background=bg_color)
+        style.configure("HelpButtonFrame.TFrame", background=self.bg_color)
         button_frame = ttk.Frame(help_window, style="HelpButtonFrame.TFrame")
         button_frame.pack(pady=10)
-        copy_help = ttk.Button(button_frame, text="copy document to clip board", command=self.copy_help)
+
+        copy_help = ttk.Button(button_frame, text="copy document to clip board", command=lambda: self.copy_help(notebook, la_list))
         copy_help.pack(side=tk.LEFT, padx=5)
         ok_button = ttk.Button(button_frame, text="better help document in webpage", command=self.open_git_webpage)
         ok_button.pack(side=tk.LEFT, padx=5)
@@ -401,6 +420,20 @@ class OllamaLauncherGUI:
         y = (help_window.winfo_screenheight() // 2) - (height // 2)
         help_window.geometry(f"{width}x{height}+{x}+{y}")
 
+    def copy_help(self, notebook, la_list):
+        try:
+            current_tab = notebook.select()         # 获取当前选项卡
+            tab_index = notebook.index(current_tab) # 获取选项卡索引
+            lan = la_list[tab_index]
+            self.root.clipboard_clear()
+            self.root.clipboard_append(HELP_TEXT_DICT[lan])
+            self.app_time('copy help document to clipboard.')
+            messagebox.showinfo("Note", "Copy help document to clipboard success.")
+
+        except tk.TclError as e:
+            messagebox.showerror("Error", f"Error when copy help document to clipboard: {e}")
+            self.app_err(f"Error when copy help document to clipboard: {e}")
+
     def about(self):
         self.app_info("open About Page.")
         about_window = tk.Toplevel()
@@ -410,13 +443,11 @@ class OllamaLauncherGUI:
         tk_icon = ImageTk.PhotoImage(self.icon)
         about_window.iconphoto(True, tk_icon)
 
-        bg_color = "#efefef"
-        fg_color = "#1e1e1e"
-        about_window.configure(bg=bg_color)
+        about_window.configure(bg=self.bg_color)
 
         style = ttk.Style()
-        style.configure("About.TFrame", background=bg_color)
-        style.configure("About.TLabel", background=bg_color, foreground=fg_color)
+        style.configure("About.TFrame", background=self.bg_color)
+        style.configure("About.TLabel", background=self.bg_color, foreground=self.fg_color)
 
         container = ttk.Frame(about_window, style="About.TFrame")
         container.pack(expand=True, fill="both", padx=10, pady=10)
@@ -609,18 +640,6 @@ class OllamaLauncherGUI:
             messagebox.showerror("Error", f"Error when copy LOG to clipboard: {e}")
             self.app_err(f"Error when copy LOG to clipboard: {e}")
         self.app_time('copy log to clipboard.')
-
-    def copy_help(self):
-
-        try:
-            self.root.clipboard_clear()
-            self.root.clipboard_append(HELP_TEXT)
-            self.app_time('copy help document to clipboard.')
-            messagebox.showinfo("Note", "Copy help document to clipboard success.")
-
-        except tk.TclError as e:
-            messagebox.showerror("Error", f"Error when copy help document to clipboard: {e}")
-            self.app_err(f"Error when copy help document to clipboard: {e}")
 
     def update_log(self, message):
         message = colorize_gin_log(message)
