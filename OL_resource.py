@@ -28,36 +28,15 @@ HELP_TEXT_HTML = """
 <html>
 <head>
     <style>
-        body {
+            body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             margin: 20px;
             background-color: #efefef;
             color: #1e1e1e;
-        }
-        h1 {
-            color: #00529b;
-            border-bottom: 2px solid #00529b;
-            padding-bottom: 5px;
-        }
-        p {
-            line-height: 1.6;
-        }
-        code {
-            background-color: #dcdcdc;
-            padding: 2px 5px;
-            border-radius: 4px;
-            font-family: "Courier New", Courier, monospace;
-        }
-        ul {
-            list-style-type: disc;
-            margin-left: 20px;
-        }
-        a {
-            color: #007bff;
-            text-decoration: none;
-        }
-        a:hover {
-            text-decoration: underline;
+            
+            /* 关键：明确允许用户选择文本 */
+            -webkit-user-select: text; /* For Safari/WebKit based browsers */
+            user-select: text;       /* Standard */
         }
     </style>
 </head>

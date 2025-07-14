@@ -38,7 +38,6 @@ from typing import Optional, Callable
 import platform
 import binascii
 import psutil
-import webview
 
 from OL_resource import *
 from utils import *
@@ -106,8 +105,10 @@ class OllamaLauncherGUI:
             pillow_image = Image.open(icon_stream)
             tk_icon = ImageTk.PhotoImage(pillow_image)
             self.root.iconphoto(True, tk_icon)
-        except Exception as e:
-            print(f"error when get icon: {e}")
+            self.icon = pillow_image
+        except:
+            print("base64 pic read fault!")
+            exit(-1)
 
         self.settings = DEFAULT_SETTINGS.copy()
         self.vars = {}
@@ -368,14 +369,8 @@ class OllamaLauncherGUI:
         help_window.title("Help - Ollama Launcher")
         help_window.geometry("800x600")
         help_window.minsize(800, 600) # 设置最小大小
-        try:
-            icon_bytes = base64.b64decode(icon_base64_data)
-            icon_stream = io.BytesIO(icon_bytes)
-            pillow_image = Image.open(icon_stream)
-            tk_icon = ImageTk.PhotoImage(pillow_image)
-            help_window.iconphoto(True, tk_icon)
-        except Exception as e:
-            print(f"help page: error when get icon: {e}")
+        tk_icon = ImageTk.PhotoImage(self.icon)
+        help_window.iconphoto(True, tk_icon)
 
         bg_color = "#efefef"
         help_window.configure(bg=bg_color)
@@ -412,16 +407,8 @@ class OllamaLauncherGUI:
         about_window.title("About - Ollama Launcher")
         about_window.geometry("500x250")
         about_window.resizable(False, False)
-        try:
-            icon_bytes = base64.b64decode(icon_base64_data)
-            icon_stream = io.BytesIO(icon_bytes)
-            pillow_image = Image.open(icon_stream)
-            tk_icon = ImageTk.PhotoImage(pillow_image)
-            about_window.iconphoto(True, tk_icon)
-        except Exception as e:
-            print(f"help page: error when get icon: {e}")
-            # Handle case where icon data might be missing or invalid
-            pass
+        tk_icon = ImageTk.PhotoImage(self.icon)
+        about_window.iconphoto(True, tk_icon)
 
         bg_color = "#efefef"
         fg_color = "#1e1e1e"
@@ -445,24 +432,6 @@ class OllamaLauncherGUI:
     def setup_tray_icon(self):
         """Sets up the system tray icon and menu."""
         global has_pystray
-        try:
-            icon_bytes = base64.b64decode(icon_base64_data)
-            icon_stream = io.BytesIO(icon_bytes)
-            image = Image.open(icon_stream)
-
-        except base64.binascii.Error:
-            messagebox.showerror("Error", f"Failed to load icon : wrong base64 bmp code.")
-            self.app_err(f"Failed to load icon : wrong base64 bmp code.")
-            print(f"Failed to load icon : wrong base64 bmp code: {e}")
-            has_pystray = False
-            return
-
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to load base64 bmp icon: {e}. Tray icon disabled.")
-            self.app_err(f"Failed to load base64 bmp icon: {e}. Tray icon disabled.")
-            print(f"Error loading icon: {e}")
-            has_pystray = False
-            return
 
         # Define menu items (text, callback function)
         # IMPORTANT: Callbacks need to be wrapped to run on the main Tkinter thread using root.after
@@ -488,7 +457,7 @@ class OllamaLauncherGUI:
             ))
 
         # Create the icon object
-        self.tray_icon = pystray.Icon("OllamaLauncher", image, "Ollama Launcher", menu)
+        self.tray_icon = pystray.Icon("OllamaLauncher", self.icon, "Ollama Launcher", menu)
 
     def start_tray_thread(self):
         """Runs the pystray icon in a separate thread."""
