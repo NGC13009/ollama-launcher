@@ -406,9 +406,9 @@ class OllamaLauncherGUI:
         button_frame = ttk.Frame(help_window, style="HelpButtonFrame.TFrame")
         button_frame.pack(pady=10)
 
-        copy_help = ttk.Button(button_frame, text="copy document to clip board", command=lambda: self.copy_help(notebook, la_list))
+        copy_help = ttk.Button(button_frame, text="copy to clip board", command=lambda: self.copy_help(notebook, la_list))
         copy_help.pack(side=tk.LEFT, padx=5)
-        ok_button = ttk.Button(button_frame, text="better help document in webpage", command=self.open_git_webpage)
+        ok_button = ttk.Button(button_frame, text="Open help in webpage", command=self.open_git_webpage)
         ok_button.pack(side=tk.LEFT, padx=5)
         close_button = ttk.Button(button_frame, text="X", command=help_window.destroy)
         close_button.pack(side=tk.LEFT, padx=5)

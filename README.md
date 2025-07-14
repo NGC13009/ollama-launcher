@@ -55,4 +55,7 @@ Before using it for the first time, please configure the model storage path. Cha
 
 Please contact the author or submit an issue. You can access this page in your browser via the button below the About page in the menu bar of ollama-launcher.
 
+## For Developing
+
+[Developing Instructions](docs/develop.md)
 

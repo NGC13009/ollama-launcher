@@ -9,7 +9,7 @@
 # @History:         2025-05-03		Create
 
 VERSION = "v3.1"
-DATE = "2025Y07M13D"
+DATE = "2025Y07M15D"
 
 # 欢迎标语 : 彩色的
 WELCONE_TEXT = f"\n\n\t\t    Ollama Launcher {VERSION} @ {DATE}\n\n\t\t\t\tWelcome!\n\n\t\t\t\x1b[40m  \x1b[0m \x1b[47m  \x1b[0m \x1b[44m  \x1b[0m \x1b[43m  \x1b[0m \x1b[41m  \x1b[0m \x1b[46m  \x1b[0m \x1b[42m  \x1b[0m \x1b[45m  \x1b[0m \x1b[49m  \x1b[0m\n\n\tHow to use: See Help & About information in the 'Info'\n\ttab of the menu bar.\n\n"
@@ -21,7 +21,7 @@ GITLINK_BOTTOM = "NGC13009/ollama-launcher.git"
 
 # 帮助页的提示文本(一个字典，方便扩展语言)
 HELP_TEXT_DICT = {
-    'CN':
+    'zh-CN':
     '''# ollama-launcher 完整说明书
 
 更好的ollama启动器，支持更多可设置参数，允许快速启停，以及最小化至系统托盘等.
@@ -48,7 +48,7 @@ HELP_TEXT_DICT = {
 > 如果您使用ollama setup安装，那么默认路径是：
 > 
 > ```
-> C:\Users\<你的用户名>\AppData\Local\Programs\Ollama\ollama.exe
+> C:/Users/<你的用户名>/AppData/Local/Programs/Ollama/ollama.exe
 > ```
 
 Ollama Launcher 是 ollama 的启动器，可以方便地启动和管理 ollama 服务进程。
@@ -209,7 +209,7 @@ Info 菜单提供了关于 Ollama Launcher 程序以及系统信息的相关功�
 
 请联系作者或提交issue。你可以通过About页面下方的按钮在浏览器打开此页面。
 ''',
-    'EN':
+    'uk-EN':
     '''# ollama-launcher Full Manual
 
 > This page is translated only from AI, and may not be completely accurate. If you find some expressions strange, please refer to the corresponding content on the Chinese page, and try to understand it using a translator you find more user-friendly. You can also provide feedback on any inaccuracies in the translation. [Chinese instruction page](./Instructions_CN.md)
@@ -238,7 +238,7 @@ A better ollama launcher, supporting more configurable parameters, allowing quic
 > If you use ollama setup to install, the default path is:
 > 
 > ```
-> C:\Users\<your username>\AppData\Local\Programs\Ollama\ollama.exe
+> C:/Users/<your username>/AppData/Local/Programs/Ollama/ollama.exe
 > ```
 
 Ollama Launcher is a launcher for ollama, which can conveniently start and manage the ollama service process.

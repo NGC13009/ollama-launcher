@@ -53,4 +53,7 @@ Ollama Launcher 不能管理模型，即只能启动和停止 ollama 服务进�
 
 请联系作者或提交issue。你可以通过ollama-launcher的菜单栏：About页面下方的按钮在浏览器打开此页面。
 
+## For Developing
+
+[Developing Instructions](develop.md)
 
