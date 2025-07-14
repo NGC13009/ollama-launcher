@@ -1,5 +1,5 @@
 # ollama-launcher
-更好的ollama服务启动器
+更好的ollama启动器，支持更多配置项目，轻松管理ollama的运行状态。
 
 ![title png](./title.png)
 

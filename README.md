@@ -152,6 +152,14 @@ Please contact the author or submit an issue if you encounter problems or want t
 
 ## For developer
 
+### 编译说明
+
+使用conda时，为了兼容多个环境，一般将pyinstaller安装在base环境，并配置环境变量，此时pyinstaller可以在任何环境下正常打包。以此避免安装多个pyinstaller或者对于不同环境配置pyinstaller的执行路径环境变量。
+
+然而，如果使用Windows系统，并且miniconda（或conda）安装在某个需要管理员权限的目录下，那么pyinstaller可能打包会出现问题（表现为找不到库，或者打包成功，但是运行时提示缺少相关的包）。这可能是由于pyinstaller无法在用户权限访问它自己的缓存文件导致的，因为这些文件在base环境，而这些目录是管理员权限才可用的。
+
+此时，打包时使用的PowerShell必须是具备管理员权限的，才能成功。如果打包失败，可以检查是否是这个原因导致的。
+
 ### TODO
 
 1. [x]中英文帮助

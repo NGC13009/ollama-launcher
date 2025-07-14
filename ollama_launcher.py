@@ -7,9 +7,9 @@
 #                           ```
 #                           # -w 不要命令行终端， -F打包为单个文件，-i指定图标
 #                           pyinstaller -w .\ollama_launcher.py -i .\favicon.ico -y
-#                           pyinstaller -w .\ollama_launcher.py -i .\favicon.ico -y --distpath C:\application\ollama
+#                           pyinstaller -w .\ollama_launcher.py -i .\favicon.ico -y --distpath C:\application\ollama  # 直接打包到某路径
 #                           ```.
-# @attention:       None
+# @attention:       !! 注意，如果您的操作系统是Windows，那么打包时可能存在问题，请参考readme.md的说明
 # @TODO:            None
 # @Author:          NGC13009
 # @History:         2025-05-03		Create
@@ -23,18 +23,16 @@ import threading
 import time
 import queue
 import pystray
-from PIL import Image
+from PIL import Image, ImageTk
 import re
 import webbrowser
 import threading
 from datetime import datetime
 import base64
-import io                   # 需要 io.BytesIO
-from PIL import Image, ImageTk
+import io
 import requests
 from urllib.parse import urlparse, urlencode
 from pathlib import Path
-from typing import Optional # 导入 Optional 用于类型提示
 from typing import Optional, Callable
 import platform
 import binascii
@@ -45,7 +43,7 @@ from utils import *
 
 has_pystray = True
 
-# 配置文件路径
+# 配置文件的存储路径
 CONFIG_FILE = "ollama_launcher_config.json"
 SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
 CONFIG_PATH = os.path.join(SCRIPT_DIR, CONFIG_FILE)
