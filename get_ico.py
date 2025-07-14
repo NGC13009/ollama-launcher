@@ -1,4 +1,4 @@
-# coding = utf-8
+# coding = utf-8 (Zh-CN / Simplified Chinese)
 # Arch   = manyArch
 #
 # @File name:       get_ico.py
@@ -22,6 +22,9 @@ try:
     # 打印出可以直接复制到代码中的 Python 变量赋值语句
     print(f"{output_variable_name} = '''{base64_string}'''")
     print("\n将上面这行代码复制到你的 Tkinter 程序中。")
+    with open("OL_source_ico.py", "w",encoding='utf-8') as f:
+        f.write(f"#程序图标文件, 请使用 get_ico.py 生成这个代码.\nicon_base64_data = '''{base64_string}'''")
+        print("现在方便了,直接把生成的东西自动更新到资源包了. 已经写入 OL_source_ico.py ,无需额外调整.")
 
 except FileNotFoundError:
     print(f"错误：找不到文件 '{icon_file}'。请确保路径正确。")

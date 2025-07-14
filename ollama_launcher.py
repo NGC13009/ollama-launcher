@@ -1,4 +1,4 @@
-# coding = utf-8
+# coding = utf-8 (Zh-CN / Simplified Chinese)
 # Arch   = win32
 #
 # @File name:       ollama_launcher.py
@@ -6,10 +6,11 @@
 #                       打包：在当前conda环境下运行
 #                           ```
 #                           # -w 不要命令行终端， -F打包为单个文件，-i指定图标
+#                           conda activate py312
 #                           pyinstaller -w .\ollama_launcher.py -i .\favicon.ico -y
-#                           pyinstaller -w .\ollama_launcher.py -i .\favicon.ico -y --distpath C:\application\ollama
+#                           pyinstaller -w .\ollama_launcher.py -i .\favicon.ico -y --distpath C:\application\ollama  # 直接打包到某路径
 #                           ```.
-# @attention:       None
+# @attention:
 # @TODO:            None
 # @Author:          NGC13009
 # @History:         2025-05-03		Create
@@ -19,238 +20,64 @@ from tkinter import ttk, filedialog, messagebox, scrolledtext
 import subprocess
 import json
 import os
-import sys
 import threading
 import time
 import queue
 import pystray
-from PIL import Image
+from PIL import Image, ImageTk
 import re
 import webbrowser
 import threading
 from datetime import datetime
 import base64
-import io                   # 需要 io.BytesIO
-from PIL import Image, ImageTk
+import io
 import requests
 from urllib.parse import urlparse, urlencode
 from pathlib import Path
-from typing import Optional # 导入 Optional 用于类型提示
 from typing import Optional, Callable
 import platform
 import binascii
 import psutil
 
-from OL_resource import HELP_TEXT, VERSION, DATE, WELCONE_TEXT, icon_base64_data, INFO_TEXT, GITLINK, GITLINK_BOTTOM
+from OL_resource import *
+from OL_source_ico import icon_base64_data
+from utils import *
 
 has_pystray = True
 
-# 配置文件路径
+# 配置文件的存储路径
 CONFIG_FILE = "ollama_launcher_config.json"
 SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
 CONFIG_PATH = os.path.join(SCRIPT_DIR, CONFIG_FILE)
 
 # 默认配置
 DEFAULT_SETTINGS = {
-    "ollama_exe_path": "C:/application/ollama/OLLAMA_FILE/ollama.exe",
+    "ollama_exe_path": "C:/application/ollama/OLLAMA_FILE/ollama.exe", # 文件路径
     "variables": {
-        "OLLAMA_MODELS": "E:/LLM/ollama_models",
-        "OLLAMA_TMPDIR": "E:/LLM/ollama_models/temp",
-        "OLLAMA_HOST": "127.0.0.1:11434",
-        "OLLAMA_ORIGINS": "*",
-        "OLLAMA_CONTEXT_LENGTH": "2048",
-        "OLLAMA_KV_CACHE_TYPE": "q8_0",
-        "OLLAMA_KEEP_ALIVE": "-1",
-        "OLLAMA_MAX_QUEUE": "512",
-        "OLLAMA_NUM_PARALLEL": "1",
-        "OLLAMA_MAX_LOADED_MODELS":"4",
-        "OLLAMA_ENABLE_CUDA": "1",
-        "CUDA_VISIBLE_DEVICES": "0",
-        "OLLAMA_FLASH_ATTENTION": "1",
-        "OLLAMA_USE_MLOCK": "1",
-        "OLLAMA_MULTIUSER_CACHE": "0",
-        "OLLAMA_INTEL_GPU": "0",
-        "OLLAMA_DEBUG": "0",
+        "OLLAMA_MODELS": "E:/LLM/ollama_models",                       # 路径
+        "OLLAMA_TMPDIR": "E:/LLM/ollama_models/temp",                  # 路径
+        "OLLAMA_HOST": "127.0.0.1:11434",                              # ip:port
+        "OLLAMA_ORIGINS": "*",                                         # 域名
+        "OLLAMA_CONTEXT_LENGTH": "2048",                               # 正整数
+        "OLLAMA_KV_CACHE_TYPE": "f16",                                 # 可选类型: f16, q8_0, q4_0
+        "OLLAMA_KEEP_ALIVE": "-1",                                     # 整数
+        "OLLAMA_MAX_QUEUE": "512",                                     # 正整数
+        "OLLAMA_NUM_PARALLEL": "1",                                    # 正整数
+        "OLLAMA_MAX_LOADED_MODELS": "4",                               # 正整数
+        "OLLAMA_ENABLE_CUDA": "1",                                     # 0或1
+        "CUDA_VISIBLE_DEVICES": "0",                                   # 英文逗号分隔的正整数
+        "OLLAMA_FLASH_ATTENTION": "1",                                 # 0或1
+        "OLLAMA_USE_MLOCK": "1",                                       # 0或1
+        "OLLAMA_MULTIUSER_CACHE": "0",                                 # 0或1
+        "OLLAMA_INTEL_GPU": "0",                                       # 0或1
+        "OLLAMA_DEBUG": "0",                                           # 0或1
     },
     "start_minimized": False,
-    "user_env": {}
+    "user_env": {}                                                     # 字典，包含环境变量name和var
 }
 
 
-# 彩色打印以支持ANSI着色
-class AnsiColorText(tk.Text):
-
-    def __init__(self, master=None, **kwargs):
-        default_bg = '#1e1e1e'
-        default_fg = '#efefef'
-
-        kwargs.setdefault('background', default_bg)
-        kwargs.setdefault('foreground', default_fg)
-        kwargs.setdefault('insertbackground', 'white')
-        kwargs.setdefault('state', tk.NORMAL)  # 修改为 NORMAL
-
-        super().__init__(master, **kwargs)
-
-        # Regex to find ANSI escape sequences
-        self.ansi_escape_pattern = re.compile(r'\x1b\[([\d;]*)m')
-
-        # --- Basic ANSI SGR code to Tkinter tag mapping ---
-        # yapf: disable
-        self.tag_configs = {
-            # Reset
-            '0': {'foreground': default_fg, 'background': default_bg, 'font': self._get_font_config()},
-
-            # Styles
-            '1': {'font': self._get_font_config(bold=True)},  # Bold
-            '4': {'underline': True},                         # Underline
-            '22': {'font': self._get_font_config(bold=False)},# Normal intensity (undo bold)
-            '24': {'underline': False},                       # Not underlined
-
-            # Foreground colors (30-37)
-            '30': {'foreground': '#2e3436'},  # Black (use dark gray)
-            '31': {'foreground': '#cc0000'},  # Red
-            '32': {'foreground': '#4e9a06'},  # Green
-            '33': {'foreground': '#c4a000'},  # Yellow
-            '34': {'foreground': '#3465a4'},  # Blue
-            '35': {'foreground': '#75507b'},  # Magenta
-            '36': {'foreground': '#06989a'},  # Cyan
-            '37': {'foreground': '#d3d7cf'},  # White (use light gray)
-            '39': {'foreground': default_fg}, # Default foreground
-
-            # --- 添加亮色前景 (90-97) ---
-            '90': {'foreground': '#555753'},  # Bright Black (darker gray)
-            '91': {'foreground': '#ef2929'},  # Bright Red
-            '92': {'foreground': '#8ae234'},  # Bright Green
-            '93': {'foreground': '#fce94f'},  # Bright Yellow
-            '94': {'foreground': '#729fcf'},  # Bright Blue
-            '95': {'foreground': '#ad7fa8'},  # Bright Magenta
-            '96': {'foreground': '#34e2e2'},  # Bright Cyan
-            '97': {'foreground': '#eeeeec'},  # Bright White
-
-            # Background colors (40-47)
-            '40': {'background': '#2e3436'},  # Black background
-            '41': {'background': '#cc0000'},  # Red background
-            '42': {'background': '#4e9a06'},  # Green background
-            '43': {'background': '#c4a000'},  # Yellow background
-            '44': {'background': '#3465a4'},  # Blue background
-            '45': {'background': '#75507b'},  # Magenta background
-            '46': {'background': '#06989a'},  # Cyan background
-            '47': {'background': '#d3d7cf'},  # White background
-            '49': {'background': default_bg},  # Default background
-            'sel' : {'background': '#4444ee', 'foreground': '#efefef'},  # 选中时的样式
-        }
-        # yapf: enable
-
-        # --- Configure tags ---
-        for code, config in self.tag_configs.items():
-            tag_name = f"ansi_{code}"
-            self.tag_configure(tag_name, **config)
-
-        # Keep track of currently active SGR codes for applying tags
-        self.active_codes = {'0'} # Start with reset state
-
-    def _get_font_config(self, bold=False, italic=False):
-        """Gets a font configuration tuple based on the widget's default font."""
-        font_str = str(self.cget('font'))
-        try:
-            font_parts = font_str.split()
-            family = font_parts[0] if font_parts else "TkDefaultFont"
-            size = int(font_parts[1]) if len(font_parts) > 1 else 10
-            weight = "bold" if bold else "normal"
-            slant = "italic" if italic else "roman"
-            # Ensure underline is not part of the font tuple directly
-            return (family, size, weight, slant)
-        except Exception:
-            return ("TkDefaultFont", 10, "bold" if bold else "normal", "italic" if italic else "roman")
-
-    def write_ansi(self, text):
-        """
-        Inserts text containing ANSI escape codes, applying colors/styles.
-        Manages widget state (NORMAL/DISABLED) and scrolling.
-        """
-        self.config(state=tk.NORMAL) # Enable writing
-        
-        # 判断插入前是否贴底
-        was_at_bottom = (self.yview()[1] == 1.0)
-
-        # Split text by ANSI codes, keeping the codes as delimiters
-        parts = self.ansi_escape_pattern.split(text)
-
-        for i, part in enumerate(parts):
-            if not part: # Skip empty parts
-                continue
-
-            if i % 2 == 0:
-                # This is plain text
-                # Determine tags based on active codes, excluding '0' unless it's the only one
-                current_tags = tuple(f"ansi_{code}" for code in self.active_codes if code != '0')
-                self.insert(tk.END, part, current_tags + ("sel",))  # 添加 sel 标签
-            else:
-                # This is ANSI code
-                codes = part.split(';')
-                needs_reset = False
-                new_codes_in_sequence = set()
-
-                for code in codes:
-                    if not code:
-                        continue
-                    code = code.lstrip('0')
-                    if not code:
-                        code = '0'
-
-                    if code == '0':
-                        needs_reset = True
-                        break
-                    if code in self.tag_configs:
-                        new_codes_in_sequence.add(code)
-
-                if needs_reset:
-                    self.active_codes = {'0'}
-                else:
-                    temp_active = set(self.active_codes)
-                    for new_code in new_codes_in_sequence:
-                        if '30' <= new_code <= '37' or new_code == '39':
-                            temp_active = {c for c in temp_active if not ('30' <= c <= '37' or c == '39')}
-                        elif '40' <= new_code <= '47' or new_code == '49':
-                            temp_active = {c for c in temp_active if not ('40' <= c <= '47' or c == '49')}
-                        elif new_code == '22':
-                            temp_active.discard('1')
-                        elif new_code == '24':
-                            temp_active.discard('4')
-                    temp_active.update(new_codes_in_sequence)
-                    if len(temp_active) > 1:
-                        temp_active.discard('0')
-                    elif not temp_active:
-                        temp_active = {'0'}
-                    self.active_codes = temp_active
-
-        # 插入完成后，根据贴底状态决定是否滚动到底部
-        if was_at_bottom:
-            self.see(tk.END)
-        
-    def copy_selection(self, event):
-        """复制选中的文本到剪贴板."""
-        try:
-            selected_text = self.get(tk.SEL_FIRST, tk.SEL_LAST)
-            self.clipboard_clear()
-            self.clipboard_append(selected_text)
-            return "break"  # 阻止默认行为
-        except tk.TclError:
-            # 没有选中内容
-            return "break"
-
-
 class OllamaLauncherGUI:
-
-    BG_GREEN = "\x1b[42m"
-    BG_YELLOW = "\x1b[43m"
-    BG_RED = "\x1b[41m"
-    BG_BLUE = "\x1b[44m"
-    BG_CYAN = "\x1b[46m"
-    BG_MAGENTA = "\x1b[45m"
-    BG_WHITE = "\x1b[47m"
-    BG_DEFAULT = "\x1b[49m"
-    RESET = "\x1b[0m"
 
     # Ollama 更新检查 API 地址
     UPDATE_CHECK_URL_BASE = "https://ollama.com/api/update"
@@ -263,14 +90,15 @@ class OllamaLauncherGUI:
         global has_pystray # Ensure global is accessible
         self.user_env = dict()
         self.root = root
-        bg_color = "#efefef"
-        root.configure(bg=bg_color)
+        self.bg_color = '#efefef'
+        self.fg_color = '#1e1e1e'
+        root.configure(bg=self.bg_color)
 
         self.root.title("Ollama Launcher")
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
-        # Increased minsize to better accommodate the side-by-side layout
-        self.root.minsize(1024, 752)
-        self.root.geometry("1024x752") # Adjusted default size
+        h, w = 1450, 905
+        self.root.minsize(h, w)
+        self.root.geometry(f"{h}x{w}")
 
         try:
             icon_bytes = base64.b64decode(icon_base64_data)
@@ -278,8 +106,10 @@ class OllamaLauncherGUI:
             pillow_image = Image.open(icon_stream)
             tk_icon = ImageTk.PhotoImage(pillow_image)
             self.root.iconphoto(True, tk_icon)
-        except Exception as e:
-            print(f"error when get icon: {e}")
+            self.icon = pillow_image
+        except:
+            print("base64 pic read fault!")
+            exit(-1)
 
         self.settings = DEFAULT_SETTINGS.copy()
         self.vars = {}
@@ -298,8 +128,9 @@ class OllamaLauncherGUI:
             self.start_tray_thread()
 
         # --- Style ---
-        style = ttk.Style()
+        style = ttk.Style(root)
         style.theme_use('clam') # Or 'alt', 'default', 'classic'
+        style.configure('.', background=self.bg_color, foreground=self.fg_color)
 
         # --- Main Frame ---
         # 从这里开始是窗口布局相关的配置
@@ -356,6 +187,37 @@ class OllamaLauncherGUI:
 
                 ttk.Entry(entry_frame, textvariable=self.vars[key], width=30).grid(row=0, column=0, sticky=(tk.W, tk.E), padx=(5, 0))
                 ttk.Button(entry_frame, text="/", command=lambda k=key: self.browse_directory(k), width=2).grid(row=0, column=1, padx=5)
+            elif key in ["OLLAMA_CONTEXT_LENGTH", "OLLAMA_MAX_QUEUE", "OLLAMA_NUM_PARALLEL", "OLLAMA_MAX_LOADED_MODELS"]: # 数值
+                try:
+                    init_val = int(default_value)
+                except (ValueError, TypeError):
+                    init_val = 0
+                self.vars[key] = tk.IntVar(value=init_val)
+                vcmd = self.root.register(validate_spinbox)
+                spinbox = ttk.Spinbox(env_frame, textvariable=self.vars[key], from_=0, to=1048576, width=28, validate="key", validatecommand=(vcmd, "%P"))
+                spinbox.grid(row=row_num, column=1, columnspan=2, sticky=(tk.W, tk.E), padx=5, pady=2)
+
+            elif key == "OLLAMA_KV_CACHE_TYPE": # --- 特定字符串选项 (String Choice) 使用下拉菜单 (Combobox) ---
+                self.vars[key] = tk.StringVar(value=default_value)
+                options = ["f16", "q8_0", "q4_0"]
+
+                if default_value not in options:
+                    self.vars[key].set(options[0])
+
+                try:
+                    style.theme_use('clam')
+                except tk.TclError:
+                    pass
+
+                style.map("Custom.TCombobox",
+                          fieldbackground=[('readonly', 'white')],
+                          foreground=[('readonly', 'black')],
+                          selectbackground=[('readonly', 'white')],
+                          selectforeground=[('readonly', 'black')])
+
+                combobox = ttk.Combobox(env_frame, textvariable=self.vars[key], values=options, state="readonly", width=28, style="Custom.TCombobox")
+                combobox.grid(row=row_num, column=1, columnspan=2, sticky=(tk.W, tk.E), padx=5, pady=2)
+
             else:  # 其他就正常文本框
                 self.vars[key] = tk.StringVar(value=default_value)
                 ttk.Entry(env_frame, textvariable=self.vars[key], width=30).grid(row=row_num, column=1, columnspan=2, sticky=(tk.W, tk.E), padx=5, pady=2)
@@ -383,8 +245,9 @@ class OllamaLauncherGUI:
         button_frame.columnconfigure((0, 1, 2, 3, 4), weight=1)
 
         self.style = ttk.Style()
-        self.style.configure('Start.TButton', background='#00aa00')
-        self.style.configure('Stop.TButton', background='#aa0000')
+        self.style.configure('Start.TButton', background="#42d39b")
+        self.style.configure('Stop.TButton', background="#fc7c7c")
+        self.style.configure('Hide.TButton', background="#6ea8e6")
 
         self.start_button = ttk.Button(button_frame, text="Ollama Run", command=self.start_ollama, style='Start.TButton')
         self.start_button.grid(row=0, column=0, padx=2, sticky='ew')
@@ -398,7 +261,7 @@ class OllamaLauncherGUI:
         self.clear_log_button_widget = ttk.Button(button_frame, text="Clear Log", command=self.clear_log)
         self.clear_log_button_widget.grid(row=0, column=3, padx=2, sticky='ew')
 
-        self.hide_button = ttk.Button(button_frame, text="Hide to tray", command=self.hide_window)
+        self.hide_button = ttk.Button(button_frame, text="Hide to tray", command=self.hide_window, style='Hide.TButton')
         self.hide_button.grid(row=0, column=4, padx=2, sticky='ew')
 
         # --- Status Bar (Inside Left Panel) ---
@@ -426,8 +289,8 @@ class OllamaLauncherGUI:
         v_scrollbar = ttk.Scrollbar(log_frame, orient=tk.VERTICAL, command=self.log_widget.yview)
         v_scrollbar.grid(row=0, column=1, sticky=(tk.N, tk.S))
         self.log_widget.configure(yscrollcommand=v_scrollbar.set)
-        self.log_widget.config(state=tk.NORMAL)  # 允许选中/复制
-        self.log_widget.bind("<Key>", lambda e: "break")  # 阻止用户输入
+        self.log_widget.config(state=tk.NORMAL)          # 允许选中/复制
+        self.log_widget.bind("<Key>", lambda e: "break") # 阻止用户输入
         self.log_widget.bind("<Control-c>", self.log_widget.copy_selection)
 
         # --- Load Initial Settings & Start Log Processing ---
@@ -507,33 +370,45 @@ class OllamaLauncherGUI:
         help_window.title("Help - Ollama Launcher")
         help_window.geometry("800x600")
         help_window.minsize(800, 600) # 设置最小大小
-        try:
-            icon_bytes = base64.b64decode(icon_base64_data)
-            icon_stream = io.BytesIO(icon_bytes)
-            pillow_image = Image.open(icon_stream)
-            tk_icon = ImageTk.PhotoImage(pillow_image)
-            help_window.iconphoto(True, tk_icon)
-        except Exception as e:
-            print(f"help page: error when get icon: {e}")
+        tk_icon = ImageTk.PhotoImage(self.icon)
+        help_window.iconphoto(True, tk_icon)
 
-        bg_color = "#efefef"
-        help_window.configure(bg=bg_color)
-        text_area = scrolledtext.ScrolledText(help_window, wrap=tk.WORD, width=80, height=20, bg=bg_color, fg="#1e1e1e", bd=0, highlightthickness=0)
-        text_area.pack(padx=10, pady=10, expand=True, fill=tk.BOTH)
-        text_area.insert(tk.END, HELP_TEXT)
-        text_area.config(state=tk.DISABLED)  # 禁止用户编辑
+        help_window.configure(bg=self.bg_color)
 
-        # 允许用户选中和复制文本
-        text_area.tag_configure("selectable", selectforeground="black", selectbackground="lightgray")
-        text_area.tag_add("selectable", "1.0", tk.END)
+        # 选项卡
+        notebook = ttk.Notebook(help_window)
+        notebook.pack(expand=True, fill='both')
+
+        help_frame = dict()
+        text_area = []
+        la_list = []
+
+        for lan, help_text in HELP_TEXT_DICT.items():
+
+            help_frame[lan] = ttk.Frame(notebook)
+            notebook.add(help_frame[lan], text=lan)
+
+            # 内容区域
+            text_cur = scrolledtext.ScrolledText(help_frame[lan], wrap=tk.WORD, width=80, height=20, bg=self.bg_color, fg=self.fg_color, bd=0, highlightthickness=0)
+            text_cur.pack(padx=10, pady=10, expand=True, fill=tk.BOTH)
+            text_cur.insert(tk.END, help_text)
+            text_cur.config(state=tk.DISABLED)
+
+            # 允许用户选中和复制文本
+            text_cur.tag_configure("selectable", selectforeground="black", selectbackground="lightgray")
+            text_cur.tag_add("selectable", "1.0", tk.END)
+
+            text_area.append(text_cur)
+            la_list.append(lan)
 
         style = ttk.Style()
-        style.configure("HelpButtonFrame.TFrame", background=bg_color)
+        style.configure("HelpButtonFrame.TFrame", background=self.bg_color)
         button_frame = ttk.Frame(help_window, style="HelpButtonFrame.TFrame")
         button_frame.pack(pady=10)
-        copy_help = ttk.Button(button_frame, text="copy document to clip board", command=self.copy_help)
+
+        copy_help = ttk.Button(button_frame, text="copy to clip board", command=lambda: self.copy_help(notebook, la_list))
         copy_help.pack(side=tk.LEFT, padx=5)
-        ok_button = ttk.Button(button_frame, text="better help document in webpage", command=self.open_git_webpage)
+        ok_button = ttk.Button(button_frame, text="Open help in webpage", command=self.open_git_webpage)
         ok_button.pack(side=tk.LEFT, padx=5)
         close_button = ttk.Button(button_frame, text="X", command=help_window.destroy)
         close_button.pack(side=tk.LEFT, padx=5)
@@ -545,30 +420,34 @@ class OllamaLauncherGUI:
         y = (help_window.winfo_screenheight() // 2) - (height // 2)
         help_window.geometry(f"{width}x{height}+{x}+{y}")
 
+    def copy_help(self, notebook, la_list):
+        try:
+            current_tab = notebook.select()         # 获取当前选项卡
+            tab_index = notebook.index(current_tab) # 获取选项卡索引
+            lan = la_list[tab_index]
+            self.root.clipboard_clear()
+            self.root.clipboard_append(HELP_TEXT_DICT[lan])
+            self.app_time('copy help document to clipboard.')
+            messagebox.showinfo("Note", "Copy help document to clipboard success.")
+
+        except tk.TclError as e:
+            messagebox.showerror("Error", f"Error when copy help document to clipboard: {e}")
+            self.app_err(f"Error when copy help document to clipboard: {e}")
+
     def about(self):
         self.app_info("open About Page.")
         about_window = tk.Toplevel()
         about_window.title("About - Ollama Launcher")
-        about_window.geometry("400x200")
+        about_window.geometry("500x250")
         about_window.resizable(False, False)
-        try:
-            icon_bytes = base64.b64decode(icon_base64_data)
-            icon_stream = io.BytesIO(icon_bytes)
-            pillow_image = Image.open(icon_stream)
-            tk_icon = ImageTk.PhotoImage(pillow_image)
-            about_window.iconphoto(True, tk_icon)
-        except Exception as e:
-            print(f"help page: error when get icon: {e}")
-            # Handle case where icon data might be missing or invalid
-            pass
+        tk_icon = ImageTk.PhotoImage(self.icon)
+        about_window.iconphoto(True, tk_icon)
 
-        bg_color = "#efefef"
-        fg_color = "#1e1e1e"
-        about_window.configure(bg=bg_color)
+        about_window.configure(bg=self.bg_color)
 
         style = ttk.Style()
-        style.configure("About.TFrame", background=bg_color)
-        style.configure("About.TLabel", background=bg_color, foreground=fg_color)
+        style.configure("About.TFrame", background=self.bg_color)
+        style.configure("About.TLabel", background=self.bg_color, foreground=self.fg_color)
 
         container = ttk.Frame(about_window, style="About.TFrame")
         container.pack(expand=True, fill="both", padx=10, pady=10)
@@ -584,24 +463,6 @@ class OllamaLauncherGUI:
     def setup_tray_icon(self):
         """Sets up the system tray icon and menu."""
         global has_pystray
-        try:
-            icon_bytes = base64.b64decode(icon_base64_data)
-            icon_stream = io.BytesIO(icon_bytes)
-            image = Image.open(icon_stream)
-
-        except base64.binascii.Error:
-            messagebox.showerror("Error", f"Failed to load icon : wrong base64 bmp code.")
-            self.app_err(f"Failed to load icon : wrong base64 bmp code.")
-            print(f"Failed to load icon : wrong base64 bmp code: {e}")
-            has_pystray = False
-            return
-
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to load base64 bmp icon: {e}. Tray icon disabled.")
-            self.app_err(f"Failed to load base64 bmp icon: {e}. Tray icon disabled.")
-            print(f"Error loading icon: {e}")
-            has_pystray = False
-            return
 
         # Define menu items (text, callback function)
         # IMPORTANT: Callbacks need to be wrapped to run on the main Tkinter thread using root.after
@@ -627,7 +488,7 @@ class OllamaLauncherGUI:
             ))
 
         # Create the icon object
-        self.tray_icon = pystray.Icon("OllamaLauncher", image, "Ollama Launcher", menu)
+        self.tray_icon = pystray.Icon("OllamaLauncher", self.icon, "Ollama Launcher", menu)
 
     def start_tray_thread(self):
         """Runs the pystray icon in a separate thread."""
@@ -722,6 +583,12 @@ class OllamaLauncherGUI:
                 else:
                     tk_var.set(str(value))
 
+        error_code = self.check_settings()
+        if error_code > 0:
+            self.app_err(f'Project setup check failed. Can not enable settings. Error with {bin(error_code)}')
+            self.app_time()
+            return
+
         # Update start_minimized var (handle potential missing key)
         start_min_value = self.settings.get('start_minimized', DEFAULT_SETTINGS['start_minimized'])
         self.start_minimized_var.set(bool(start_min_value))
@@ -735,6 +602,11 @@ class OllamaLauncherGUI:
         self.app_time('settings enabled.')
 
     def save_settings(self):
+        error_code = self.check_settings()
+        if error_code > 0:
+            self.app_err(f'Project setup check failed. No new configurations will be stored until it is fixed. Error with {bin(error_code)}')
+            self.app_time()
+            return
         current_settings = {'ollama_exe_path': self.vars['ollama_exe_path'].get(), 'variables': {}, 'start_minimized': self.start_minimized_var.get(), "user_env": self.user_env}
         for key, tk_var in self.vars.items():
             if key != 'ollama_exe_path':
@@ -769,20 +641,8 @@ class OllamaLauncherGUI:
             self.app_err(f"Error when copy LOG to clipboard: {e}")
         self.app_time('copy log to clipboard.')
 
-    def copy_help(self):
-
-        try:
-            self.root.clipboard_clear()
-            self.root.clipboard_append(HELP_TEXT)
-            self.app_time('copy help document to clipboard.')
-            messagebox.showinfo("Note", "Copy help document to clipboard success.")
-
-        except tk.TclError as e:
-            messagebox.showerror("Error", f"Error when copy help document to clipboard: {e}")
-            self.app_err(f"Error when copy help document to clipboard: {e}")
-
     def update_log(self, message):
-        message = self.colorize_gin_log(message)
+        message = colorize_gin_log(message)
         self.log_widget.write_ansi(message)
         print(message, end='', flush=True)
 
@@ -828,6 +688,12 @@ class OllamaLauncherGUI:
             self.app_info(f"{pipe_name} stream closed")
 
     def start_ollama(self):
+        error_code = self.check_settings()
+        if error_code > 0:
+            self.app_err(f'Project setup check failed. Ollama not start. Error with {bin(error_code)}')
+            self.app_time()
+            return
+
         if self.is_running:
             messagebox.showwarning("Info", "Ollama is already running.")
             self.app_warn("Ollama is already running.")
@@ -916,13 +782,13 @@ class OllamaLauncherGUI:
             self.start_button.config(state=tk.NORMAL)
             self.stop_button.config(state=tk.DISABLED)
                             # Threads reading pipes should exit automatically as pipes close
-    def psutil_terminate(self,proc_pid):
+    def psutil_terminate(self, proc_pid):
         parent_proc = psutil.Process(proc_pid)
         for child_proc in parent_proc.children(recursive=True):
             self.app_info(f"terminate proc PID: {child_proc.ppid()} ...")
             child_proc.terminate()
         parent_proc.terminate()
-    
+
     def stop_ollama(self):
         if not self.is_running or not self.ollama_process:
             self.is_running = False # Ensure state consistency
@@ -979,13 +845,11 @@ class OllamaLauncherGUI:
         self.app_info('exit...')
         self.app_time()
         if self.is_running:
-            result = messagebox.askyesnocancel(
-                    "Note", 
-                    "Do you really want to EXIT?", 
-                    detail="Ollama server is running.\nIf you want to stop ollama deamon & exit, choose Yes.\nIf you want to hidden the window to tray, choose NO.", 
-                    icon=messagebox.WARNING, 
-                    default=messagebox.CANCEL
-                )
+            result = messagebox.askyesnocancel("Note",
+                                               "Do you really want to EXIT?",
+                                               detail="Ollama server is running.\nIf you want to stop ollama deamon & exit, choose Yes.\nIf you want to hidden the window to tray, choose NO.",
+                                               icon=messagebox.WARNING,
+                                               default=messagebox.CANCEL)
             if result == True:
                 self.app_info("stop ollama.exe...")
                 self.stop_ollama()
@@ -1001,7 +865,7 @@ class OllamaLauncherGUI:
             elif result == False:
                 self.hide_window()
                 return
-            else: # return None
+            else:  # return None
                 return
 
         else:
@@ -1188,87 +1052,6 @@ class OllamaLauncherGUI:
         self.root.wait_window(editor_window) # Wait until the editor window is closed
         self.app_info(f"Updated self.user_env: {self.user_env}")
 
-    def get_status_color(self, status_code_str):
-        """根据 HTTP 状态码字符串返回合适的 ANSI 背景色代码。"""
-        # (此函数保持不变)
-        try:
-            code = int(status_code_str)
-            if 100 <= code < 200: return self.BG_BLUE
-            elif 200 <= code < 300: return self.BG_GREEN
-            elif 300 <= code < 400: return self.BG_CYAN
-            elif 400 <= code < 500: return self.BG_YELLOW
-            elif 500 <= code < 600: return self.BG_RED
-            else: return self.BG_WHITE
-        except ValueError:
-            return self.BG_WHITE
-
-    def get_method_color(self, method_str):
-        """根据 HTTP 方法字符串返回合适的 ANSI 背景色代码。"""
-        colors = {
-            "GET": self.BG_BLUE,
-            "POST": self.BG_GREEN,
-            "PUT": self.BG_YELLOW,
-            "DELETE": self.BG_RED,
-            "PATCH": self.BG_MAGENTA,
-            "HEAD": self.BG_CYAN,
-            "OPTIONS": self.BG_WHITE,
-        }
-        return colors.get(method_str, self.BG_WHITE)
-
-    def colorize_gin_log(self, log_line):
-        """
-        接收一个字符串（可能是 Gin 日志行），如果包含 "[GIN]"，
-        则对 HTTP 状态码和方法及其周围空格应用 ANSI 背景色 (不包括 '|' 符号)。
-
-        参数:
-            log_line (str): 输入的日志字符串。
-
-        返回:
-            str: 带有 ANSI 颜色代码的字符串，或者如果输入不含 "[GIN]" 则返回原字符串。
-        """
-        if "[GIN]" not in log_line:
-            return log_line
-
-        colored_line = log_line
-
-        # 1. 查找并着色状态码字段 (空格 + 数字 + 空格)
-        # 使用原正则表达式分离各部分
-        status_pattern_original = r'(\|\s*)(\d{3})(\s*\|)'
-
-        def replace_status_modified(match):
-            pipe_and_leading_spaces = match.group(1)  # 例: "|  "
-            status_code = match.group(2)              # 例: "200"
-            trailing_spaces_and_pipe = match.group(3) # 例: "  |"
-
-            leading_spaces = pipe_and_leading_spaces[1:]    # 提取第一个'|'后面的空格
-            trailing_spaces = trailing_spaces_and_pipe[:-1] # 提取最后一个'|'前面的空格
-
-            color = self.get_status_color(status_code)
-
-            # 构造替换字符串: 第一个'|' + 颜色开始 + 前导空格 + 状态码 + 尾随空格 + 颜色重置 + 第二个'|'
-            return f"|{color}{leading_spaces}{status_code}{trailing_spaces}{self.RESET}|"
-
-        colored_line = re.sub(status_pattern_original, replace_status_modified, colored_line)
-
-        # 2. 查找并着色 HTTP 方法字段 (空格 + 方法 + 空格)
-        method_pattern_original = r'(\|\s*)(\b(?:GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)\b)(\s+)'
-
-        def replace_method_modified(match):
-            pipe_and_leading_spaces = match.group(1) # 例: "| "
-            method = match.group(2)                  # 例: "GET"
-            trailing_spaces = match.group(3)         # 例: "      "
-
-            leading_spaces = pipe_and_leading_spaces[1:] # 提取第一个'|'后面的空格
-
-            color = self.get_method_color(method)
-
-            # 构造替换字符串: 第一个'|' + 颜色开始 + 前导空格 + 方法 + 尾随空格 + 颜色重置
-            return f"|{color}{leading_spaces}{method}{trailing_spaces}{self.RESET}"
-
-        colored_line = re.sub(method_pattern_original, replace_method_modified, colored_line)
-
-        return colored_line
-
     def open_git_webpage(self):
         webbrowser.open_new(GITLINK)
         self.app_info("open webpage of ollama-launcher")
@@ -1299,8 +1082,10 @@ class OllamaLauncherGUI:
     def get_platform_details_msgbox(self):
         a = self.get_platform_details()
         ollama_version = self.get_ollama_version()
-        messagebox.showinfo("System platfrom",f"os={a["os"]}\narch={a["arch"]}\nollama={ollama_version}")
-        
+        os = a["os"]
+        arch = a["arch"]
+        messagebox.showinfo("System platfrom", f"os={a}\narch={arch}\nollama={ollama_version}")
+
     def get_ollama_platform_archive_url(self, current_version="0.0.0") -> Optional[str]:
         self.app_info(f"UPDATE_CHECK_URL_BASE: {self.UPDATE_CHECK_URL_BASE}")
         platform_info = self.get_platform_details()
@@ -1387,7 +1172,7 @@ class OllamaLauncherGUI:
                     # --- 第四步：构建最终的 GitHub 下载 URL ---
                     final_download_url = self.GITHUB_DOWNLOAD_URL_TEMPLATE.format(version_tag=version_tag, filename=target_filename)
                     self.app_info(f"Final download URL: {final_download_url}")
-                    return (final_download_url,version_tag) # 返回构建好的 URL 字符串
+                    return (final_download_url, version_tag) # 返回构建好的 URL 字符串
 
                 except requests.exceptions.JSONDecodeError:
                     self.app_err("Unable to parse the JSON content of the server response. Update terminate.")
@@ -1417,10 +1202,11 @@ class OllamaLauncherGUI:
         if ret is None:
             self.app_err("Error occurred while processing update response or building URL. Update terminate.")
             return
-        url,version_tag = ret
+        url, version_tag = ret
         ollama_version = self.get_ollama_version()
-        
-        if messagebox.askyesno("Ollama download", f"The latest ollama version is {version_tag}. \nCurrent Version is {ollama_version}.\nWould you want to open web browser to download it?\nURL: {url}"):
+
+        if messagebox.askyesno("Ollama download",
+                               f"The latest ollama version is {version_tag}. \nCurrent Version is {ollama_version}.\nWould you want to open web browser to download it?\nURL: {url}"):
             self.app_info("Ollama update: open the URL in web browser.")
             webbrowser.open_new(url)
         else:
@@ -1435,26 +1221,26 @@ class OllamaLauncherGUI:
         self.app_info("open webpage of OLLAMA_MODEL_LIST")
 
     def get_ollama_version(self) -> str | None:
+        error_code = self.check_settings()
+        if error_code > 0:
+            self.app_err(f'Project setup check failed. Fix problem and then to try again. Error with {bin(error_code)}')
+            self.app_time()
+            return
+
         ollama_path = self.vars['ollama_exe_path'].get()
 
         try:
-            command = [ollama_path, "-v"] 
-            result = subprocess.run(
-                command,
-                capture_output=True,  
-                text=True,            
-                check=True,           
-                encoding='utf-8'      
-            )
+            command = [ollama_path, "-v"]
+            result = subprocess.run(command, capture_output=True, text=True, check=True, encoding='utf-8')
 
-            output = result.stdout.strip() 
+            output = result.stdout.strip()
 
             match = re.search(r"(?:ollama version is|client version is)\s+([\d\.]+)", output)
-            
+
             if match:
-                version = match.group(1) 
-                self.app_info(f"Ollama version tag: '{version}'") 
-                return version 
+                version = match.group(1)
+                self.app_info(f"Ollama version tag: '{version}'")
+                return version
             else:
                 self.app_err(f"Can not get the version tag from stdout. Output was: '{output}'")
                 return None
@@ -1468,7 +1254,7 @@ class OllamaLauncherGUI:
                 self.app_err(f"stdout: {e.stdout.strip()}")
             if e.stderr:
                 self.app_err(f"stderr: {e.stderr.strip()}")
-            return None 
+            return None
         except Exception as e:
             self.app_err(f"An unknown error occurred: {e}")
             return None
@@ -1480,8 +1266,8 @@ class OllamaLauncherGUI:
             return
         else:
             messagebox.showinfo("Ollama Version", f"The version of Ollama is: {version}")
-            return 
-    
+            return
+
     def open_ollama_path(self):
         file_path_str = self.vars['ollama_exe_path'].get()
         try:
@@ -1493,12 +1279,12 @@ class OllamaLauncherGUI:
                 else:
                     self.app_err(f"Can not get the correct file path from : '{file_path_str}' ") # 输出错误提示
                     return
-            
+
             # 3. 检查提取的目录路径是否存在
-            if not os.path.exists(directory_path): # 检查目录是否存在
+            if not os.path.exists(directory_path):                    # 检查目录是否存在
                 self.app_err(f"path not exist : '{directory_path}' ") # 输出错误提示
                 return
-            
+
             if not os.path.isdir(directory_path): # 确保它确实是一个目录
                 self.app_err(f"Path is not valid : '{directory_path}' ")
                 return
@@ -1510,26 +1296,163 @@ class OllamaLauncherGUI:
 
             if current_os == "Windows":
                 # 在Windows上，os.startfile() 可以直接打开目录（在文件浏览器中）
-                os.startfile(os.path.normpath(directory_path)) # 使用 normpath 确保路径格式正确
-            elif current_os == "Darwin": # "Darwin" 是 macOS 的内核名称
-                # 在macOS上，使用 'open' 命令
-                subprocess.run(['open', directory_path], check=True) # 执行 open 命令
-            else: # 默认为 Linux 或其他类 Unix 系统
-                # 在Linux上，通常使用 'xdg-open'
+                os.startfile(os.path.normpath(directory_path))                            # 使用 normpath 确保路径格式正确
+            elif current_os == "Darwin":                                                  # "Darwin" 是 macOS 的内核名称
+                                                                                          # 在macOS上，使用 'open' 命令
+                subprocess.run(['open', directory_path], check=True)                      # 执行 open 命令
+            else:                                                                         # 默认为 Linux 或其他类 Unix 系统
+                                                                                          # 在Linux上，通常使用 'xdg-open'
                 try:
-                    subprocess.run(['xdg-open', directory_path], check=True) # 执行 xdg-open 命令
-                except FileNotFoundError: # 如果 'xdg-open' 命令未找到
-                    self.app_err(f"Detected OS = Linux. But can not find 'xdg-open'") # 输出错误信息
-                    self.app_err(f"Please open it manully: {directory_path}") # 提示手动打开
-                except subprocess.CalledProcessError as e: # 如果命令执行出错
+                    subprocess.run(['xdg-open', directory_path], check=True)              # 执行 xdg-open 命令
+                except FileNotFoundError:                                                 # 如果 'xdg-open' 命令未找到
+                    self.app_err(f"Detected OS = Linux. But can not find 'xdg-open'")     # 输出错误信息
+                    self.app_err(f"Please open it manully: {directory_path}")             # 提示手动打开
+                except subprocess.CalledProcessError as e:                                # 如果命令执行出错
                     self.app_err(f"Error occure when open '{directory_path}' with : {e}") # 输出错误信息
 
-        except Exception as e: # 捕获其他所有可能的异常
+        except Exception as e:                  # 捕获其他所有可能的异常
             self.app_err(f"Unknow error : {e}") # 输出通用错误信息
+
+    def check_settings(self, vars=None):
+        error_code = 0
+        if vars == None:
+            vars = self.vars
+        try:
+            ollama_exe_path = vars['ollama_exe_path'].get()
+            OLLAMA_MODELS = vars['OLLAMA_MODELS'].get()
+            OLLAMA_TMPDIR = vars['OLLAMA_TMPDIR'].get()
+            OLLAMA_HOST = vars['OLLAMA_HOST'].get()
+            OLLAMA_ORIGINS = vars['OLLAMA_ORIGINS'].get()
+            OLLAMA_CONTEXT_LENGTH = vars['OLLAMA_CONTEXT_LENGTH'].get()
+            OLLAMA_KV_CACHE_TYPE = vars['OLLAMA_KV_CACHE_TYPE'].get()
+            OLLAMA_KEEP_ALIVE = vars['OLLAMA_KEEP_ALIVE'].get()
+            OLLAMA_MAX_QUEUE = vars['OLLAMA_MAX_QUEUE'].get()
+            OLLAMA_NUM_PARALLEL = vars['OLLAMA_NUM_PARALLEL'].get()
+            OLLAMA_MAX_LOADED_MODELS = vars['OLLAMA_MAX_LOADED_MODELS'].get()
+            OLLAMA_ENABLE_CUDA = vars['OLLAMA_ENABLE_CUDA'].get()
+            CUDA_VISIBLE_DEVICES = vars['CUDA_VISIBLE_DEVICES'].get()
+            OLLAMA_FLASH_ATTENTION = vars['OLLAMA_FLASH_ATTENTION'].get()
+            OLLAMA_USE_MLOCK = vars['OLLAMA_USE_MLOCK'].get()
+            OLLAMA_MULTIUSER_CACHE = vars['OLLAMA_MULTIUSER_CACHE'].get()
+            OLLAMA_INTEL_GPU = vars['OLLAMA_INTEL_GPU'].get()
+            OLLAMA_DEBUG = vars['OLLAMA_DEBUG'].get()
+        except Exception as e:
+            self.app_err(f"Check fault! Error somewhere when loading config variables: {e}")
+            messagebox.showerror("Check fault!", f"Error somewhere when loading config variables: {e}")
+            error_code = 131072
+            return error_code
+
+        # Validate ollama_exe_path
+        if (not ollama_exe_path) or (not os.path.isfile(ollama_exe_path)):
+            self.app_err(f"Config fault! ollama_exe_path file not found: {ollama_exe_path}.")
+            messagebox.showerror("Config fault!", f"ollama_exe_path file not found: {ollama_exe_path}")
+            error_code += 1
+        # Validate OLLAMA_MODELS
+        if (not OLLAMA_MODELS) or (not os.path.isdir(OLLAMA_MODELS)):
+            self.app_err(f"Config fault! OLLAMA_MODELS directory not found: {OLLAMA_MODELS}.")
+            messagebox.showerror("Config fault!", f"OLLAMA_MODELS directory not found: {OLLAMA_MODELS}")
+            error_code += 2
+
+        # Validate OLLAMA_TMPDIR
+        if (not OLLAMA_TMPDIR) or (not os.path.isdir(OLLAMA_TMPDIR)):
+            self.app_err(f"Config fault! OLLAMA_TMPDIR directory not found: {OLLAMA_TMPDIR}.")
+            messagebox.showerror("Config fault!", f"OLLAMA_TMPDIR directory not found: {OLLAMA_TMPDIR}")
+            error_code += 4
+
+        # Validate OLLAMA_HOST
+        if not is_valid_host_port(OLLAMA_HOST):
+            self.app_err(f"Config fault! OLLAMA_HOST must be a valid IP:port. Current value: {OLLAMA_HOST}")
+            messagebox.showerror("Config fault!", "OLLAMA_HOST must be a valid IP:port")
+            error_code += 8
+
+        # Validate OLLAMA_ORIGINS
+        # it just any string...
+
+        # Validate OLLAMA_CONTEXT_LENGTH
+        if OLLAMA_CONTEXT_LENGTH <= 0:
+            self.app_err("fConfig fault! OLLAMA_CONTEXT_LENGTH must be a positive integer. Current value: {OLLAMA_CONTEXT_LENGTH}")
+            messagebox.showerror("Config fault!", "OLLAMA_CONTEXT_LENGTH must be a positive integer")
+            error_code += 16
+
+        # Validate OLLAMA_KV_CACHE_TYPE
+        if OLLAMA_KV_CACHE_TYPE not in ["f16", "q8_0", "q4_0"]:
+            self.app_err(f"Config fault! OLLAMA_KV_CACHE_TYPE must be one of 'f16', 'q8_0', 'q4_0'. Current value: {OLLAMA_KV_CACHE_TYPE}")
+            messagebox.showerror("Config fault!", "OLLAMA_KV_CACHE_TYPE must be one of 'f16', 'q8_0', 'q4_0'")
+            error_code += 32
+
+        # OLLAMA_KEEP_ALIVE can be "1500" or such as "5m0s"... 不弄了算了
+
+        # Validate OLLAMA_MAX_QUEUE
+        if OLLAMA_MAX_QUEUE <= 0:
+            self.app_err(f"Config fault! OLLAMA_MAX_QUEUE must be a positive integer. Current value: {OLLAMA_MAX_QUEUE}")
+            messagebox.showerror("Config fault!", "OLLAMA_MAX_QUEUE must be a positive integer")
+            error_code += 128
+
+        # Validate OLLAMA_NUM_PARALLEL
+        if int(OLLAMA_NUM_PARALLEL) <= 0:
+            self.app_err(f"Config fault! OLLAMA_NUM_PARALLEL must be a positive integer. Current value: {OLLAMA_NUM_PARALLEL}")
+            messagebox.showerror("Config fault!", "OLLAMA_NUM_PARALLEL must be a positive integer")
+            error_code += 256
+
+        # Validate OLLAMA_MAX_LOADED_MODELS
+        if OLLAMA_MAX_LOADED_MODELS <= 0:
+            self.app_err(f"Config fault! OLLAMA_MAX_LOADED_MODELS must be a positive integer. Current value: {OLLAMA_MAX_LOADED_MODELS}")
+            messagebox.showerror("Config fault!", "OLLAMA_MAX_LOADED_MODELS must be a positive integer")
+            error_code += 512
+
+        # Validate CUDA_VISIBLE_DEVICES
+        if CUDA_VISIBLE_DEVICES and not all(dev.isdigit() for dev in CUDA_VISIBLE_DEVICES.split(",")):
+            self.app_err(f"Config fault! CUDA_VISIBLE_DEVICES must be a comma-separated (',') list of integers. Current value: {CUDA_VISIBLE_DEVICES}")
+            messagebox.showerror("Config fault!", "CUDA_VISIBLE_DEVICES must be a comma-separated (',') list of integers")
+            error_code += 1024
+
+        # bool check: 理论上这里不应该有错误，因为配置是程序自己弄的。但是为了防止用户自己手写json，还是检查一下。
+
+        # Validate OLLAMA_ENABLE_CUDA
+        if OLLAMA_ENABLE_CUDA not in ["0", "1", 0, 1]:
+            self.app_err(f"Config fault! OLLAMA_ENABLE_CUDA must be 0 or 1. Current value: {OLLAMA_ENABLE_CUDA}")
+            messagebox.showerror("Config fault!", "OLLAMA_ENABLE_CUDA must be 0 or 1")
+            error_code += 2048
+
+        # Validate OLLAMA_FLASH_ATTENTION
+        if OLLAMA_FLASH_ATTENTION not in ["0", "1", 0, 1]:
+            self.app_err(f"Config fault! OLLAMA_FLASH_ATTENTION must be 0 or 1. Current value: {OLLAMA_FLASH_ATTENTION}")
+            messagebox.showerror("Config fault!", "OLLAMA_FLASH_ATTENTION must be 0 or 1")
+            error_code += 4096
+
+        # Validate OLLAMA_USE_MLOCK
+        if OLLAMA_USE_MLOCK not in ["0", "1", 0, 1]:
+            self.app_err(f"Config fault! OLLAMA_USE_MLOCK must be 0 or 1. Current value: {OLLAMA_USE_MLOCK}")
+            messagebox.showerror("Config fault!", "OLLAMA_USE_MLOCK must be 0 or 1")
+            error_code += 8192
+
+        # Validate OLLAMA_MULTIUSER_CACHE
+        if OLLAMA_MULTIUSER_CACHE not in ["0", "1", 0, 1]:
+            self.app_err(f"Config fault! OLLAMA_MULTIUSER_CACHE must be 0 or 1. Current value: {OLLAMA_MULTIUSER_CACHE}")
+            messagebox.showerror("Config fault!", "OLLAMA_MULTIUSER_CACHE must be 0 or 1")
+            error_code += 16384
+
+        # Validate OLLAMA_INTEL_GPU
+        if OLLAMA_INTEL_GPU not in ["0", "1", 0, 1]:
+            self.app_err(f"Config fault! OLLAMA_INTEL_GPU must be 0 or 1. Current value: {OLLAMA_INTEL_GPU}")
+            messagebox.showerror("Config fault!", "OLLAMA_INTEL_GPU must be 0 or 1")
+            error_code += 32768
+
+        # Validate OLLAMA_DEBUG
+        if OLLAMA_DEBUG not in ["0", "1", 0, 1]:
+            self.app_err(f"Config fault! OLLAMA_DEBUG must be 0 or 1. Current value: {OLLAMA_DEBUG}")
+            messagebox.showerror("Config fault!", "OLLAMA_DEBUG must be 0 or 1")
+            error_code += 65536
+        return error_code
 
 
 if __name__ == "__main__":
     print('[info] run')
+    try:      # high dpi 支持
+        from ctypes import windll
+        windll.shcore.SetProcessDpiAwareness(1)
+    except ImportError:
+        pass
     root = tk.Tk()
     app = OllamaLauncherGUI(root)
     root.mainloop()
