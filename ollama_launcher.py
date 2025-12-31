@@ -70,6 +70,7 @@ DEFAULT_SETTINGS = {
         "OLLAMA_USE_MLOCK": "1",                                       # 0或1
         "OLLAMA_MULTIUSER_CACHE": "0",                                 # 0或1
         "OLLAMA_INTEL_GPU": "0",                                       # 0或1
+        "OLLAMA_VULKAN": "0",                                          # 0或1
         "OLLAMA_DEBUG": "0",                                           # 0或1
     },
     "start_minimized": False,
@@ -96,7 +97,7 @@ class OllamaLauncherGUI:
 
         self.root.title("Ollama Launcher")
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
-        h, w = 1450, 905
+        h, w = 1450, 940
         self.root.minsize(h, w)
         self.root.geometry(f"{h}x{w}")
 
@@ -171,14 +172,14 @@ class OllamaLauncherGUI:
         row_num = 0
         for key, default_value in DEFAULT_SETTINGS["variables"].items():
             ttk.Label(env_frame, text=f"{key}:").grid(row=row_num, column=0, sticky=tk.W, padx=5, pady=2)
-            if key in ["OLLAMA_ENABLE_CUDA", "OLLAMA_FLASH_ATTENTION", "OLLAMA_USE_MLOCK", "OLLAMA_DEBUG", "OLLAMA_MULTIUSER_CACHE", "OLLAMA_INTEL_GPU"]: # 是 bool
+            if key in ["OLLAMA_ENABLE_CUDA", "OLLAMA_FLASH_ATTENTION", "OLLAMA_USE_MLOCK", "OLLAMA_DEBUG", "OLLAMA_MULTIUSER_CACHE", "OLLAMA_INTEL_GPU", "OLLAMA_VULKAN"]: # 是 bool
                 try:
                     init_val = int(default_value)
                 except (ValueError, TypeError):
                     init_val = 0
                 self.vars[key] = tk.IntVar(value=init_val)
                 ttk.Checkbutton(env_frame, variable=self.vars[key]).grid(row=row_num, column=1, columnspan=2, sticky=tk.W, padx=5, pady=2)
-            elif key in ["OLLAMA_MODELS", "OLLAMA_TMPDIR"]:                                                                                               # 需要配置路径的
+            elif key in ["OLLAMA_MODELS", "OLLAMA_TMPDIR"]:                                                                                                                # 需要配置路径的
                 self.vars[key] = tk.StringVar(value=default_value)
                 entry_frame = ttk.Frame(env_frame)
 
@@ -1313,136 +1314,77 @@ class OllamaLauncherGUI:
         except Exception as e:                  # 捕获其他所有可能的异常
             self.app_err(f"Unknow error : {e}") # 输出通用错误信息
 
-    def check_settings(self, vars=None):
+    def check_settings(self, vars=None): # 17
+
         error_code = 0
-        if vars == None:
+        if vars is None:
             vars = self.vars
+
+        config_values = {}
         try:
-            ollama_exe_path = vars['ollama_exe_path'].get()
-            OLLAMA_MODELS = vars['OLLAMA_MODELS'].get()
-            OLLAMA_TMPDIR = vars['OLLAMA_TMPDIR'].get()
-            OLLAMA_HOST = vars['OLLAMA_HOST'].get()
-            OLLAMA_ORIGINS = vars['OLLAMA_ORIGINS'].get()
-            OLLAMA_CONTEXT_LENGTH = vars['OLLAMA_CONTEXT_LENGTH'].get()
-            OLLAMA_KV_CACHE_TYPE = vars['OLLAMA_KV_CACHE_TYPE'].get()
-            OLLAMA_KEEP_ALIVE = vars['OLLAMA_KEEP_ALIVE'].get()
-            OLLAMA_MAX_QUEUE = vars['OLLAMA_MAX_QUEUE'].get()
-            OLLAMA_NUM_PARALLEL = vars['OLLAMA_NUM_PARALLEL'].get()
-            OLLAMA_MAX_LOADED_MODELS = vars['OLLAMA_MAX_LOADED_MODELS'].get()
-            OLLAMA_ENABLE_CUDA = vars['OLLAMA_ENABLE_CUDA'].get()
-            CUDA_VISIBLE_DEVICES = vars['CUDA_VISIBLE_DEVICES'].get()
-            OLLAMA_FLASH_ATTENTION = vars['OLLAMA_FLASH_ATTENTION'].get()
-            OLLAMA_USE_MLOCK = vars['OLLAMA_USE_MLOCK'].get()
-            OLLAMA_MULTIUSER_CACHE = vars['OLLAMA_MULTIUSER_CACHE'].get()
-            OLLAMA_INTEL_GPU = vars['OLLAMA_INTEL_GPU'].get()
-            OLLAMA_DEBUG = vars['OLLAMA_DEBUG'].get()
+            keys_to_load = [
+                'ollama_exe_path', 'OLLAMA_MODELS', 'OLLAMA_TMPDIR', 'OLLAMA_HOST', 'OLLAMA_ORIGINS', 'OLLAMA_CONTEXT_LENGTH', 'OLLAMA_KV_CACHE_TYPE', 'OLLAMA_KEEP_ALIVE', 'OLLAMA_MAX_QUEUE',
+                'OLLAMA_NUM_PARALLEL', 'OLLAMA_MAX_LOADED_MODELS', 'OLLAMA_ENABLE_CUDA', 'CUDA_VISIBLE_DEVICES', 'OLLAMA_FLASH_ATTENTION', 'OLLAMA_USE_MLOCK', 'OLLAMA_VULKAN',
+                'OLLAMA_MULTIUSER_CACHE', 'OLLAMA_INTEL_GPU', 'OLLAMA_DEBUG'
+            ]
+            for key in keys_to_load:
+                config_values[key] = vars[key].get()
         except Exception as e:
             self.app_err(f"Check fault! Error somewhere when loading config variables: {e}")
             messagebox.showerror("Check fault!", f"Error somewhere when loading config variables: {e}")
-            error_code = 131072
-            return error_code
+            return 1 << 17
 
-        # Validate ollama_exe_path
-        if (not ollama_exe_path) or (not os.path.isfile(ollama_exe_path)):
-            self.app_err(f"Config fault! ollama_exe_path file not found: {ollama_exe_path}.")
-            messagebox.showerror("Config fault!", f"ollama_exe_path file not found: {ollama_exe_path}")
-            error_code += 1
-        # Validate OLLAMA_MODELS
-        if (not OLLAMA_MODELS) or (not os.path.isdir(OLLAMA_MODELS)):
-            self.app_err(f"Config fault! OLLAMA_MODELS directory not found: {OLLAMA_MODELS}.")
-            messagebox.showerror("Config fault!", f"OLLAMA_MODELS directory not found: {OLLAMA_MODELS}")
-            error_code += 2
+        # 2. 定义校验辅助函数 (使逻辑更清晰)
+        def is_pos_int(v):
+            try:
+                return int(v) > 0
+            except:
+                return False
 
-        # Validate OLLAMA_TMPDIR
-        if (not OLLAMA_TMPDIR) or (not os.path.isdir(OLLAMA_TMPDIR)):
-            self.app_err(f"Config fault! OLLAMA_TMPDIR directory not found: {OLLAMA_TMPDIR}.")
-            messagebox.showerror("Config fault!", f"OLLAMA_TMPDIR directory not found: {OLLAMA_TMPDIR}")
-            error_code += 4
+        def is_bool_like(v):
+            return v in ["0", "1", 0, 1]
 
-        # Validate OLLAMA_HOST
-        if not is_valid_host_port(OLLAMA_HOST):
-            self.app_err(f"Config fault! OLLAMA_HOST must be a valid IP:port. Current value: {OLLAMA_HOST}")
-            messagebox.showerror("Config fault!", "OLLAMA_HOST must be a valid IP:port")
-            error_code += 8
+        def is_csv_ints(v):
+            if not v: return True # 原逻辑允许为空
+            parts = v.split(',')
+            return all(p.strip().isdigit() for p in parts)
 
-        # Validate OLLAMA_ORIGINS
-        # it just any string...
+        check_rules = [
+            ('ollama_exe_path', 1 << 0, lambda v: v and os.path.isfile(v), "file not found: {}"),
+            ('OLLAMA_MODELS', 1 << 1, lambda v: v and os.path.isdir(v), "directory not found: {}"),
+            ('OLLAMA_TMPDIR', 1 << 2, lambda v: v and os.path.isdir(v), "directory not found: {}"),
+            ('OLLAMA_HOST', 1 << 3, lambda v: is_valid_host_port(v), "must be a valid IP:port. Current value: {}"),                              # 需确保 is_valid_host_port 可用
+                                                                                                                                                 # ('OLLAMA_ORIGINS', ...) 原代码未校验，跳过
+            ('OLLAMA_CONTEXT_LENGTH', 1 << 4, is_pos_int, "must be a positive integer. Current value: {}"),
+            ('OLLAMA_KV_CACHE_TYPE', 1 << 5, lambda v: v in ["f16", "q8_0", "q4_0"], "must be one of 'f16', 'q8_0', 'q4_0'. Current value: {}"),
+                                                                                                                                                 # ('OLLAMA_KEEP_ALIVE', ...) 原代码跳过
+            ('OLLAMA_MAX_QUEUE', 1 << 6, is_pos_int, "must be a positive integer. Current value: {}"),
+            ('OLLAMA_NUM_PARALLEL', 1 << 7, is_pos_int, "must be a positive integer. Current value: {}"),
+            ('OLLAMA_MAX_LOADED_MODELS', 1 << 8, is_pos_int, "must be a positive integer. Current value: {}"),
+            ('CUDA_VISIBLE_DEVICES', 1 << 9, is_csv_ints, "must be a comma-separated (',') list of integers. Current value: {}"),
 
-        # Validate OLLAMA_CONTEXT_LENGTH
-        if OLLAMA_CONTEXT_LENGTH <= 0:
-            self.app_err("fConfig fault! OLLAMA_CONTEXT_LENGTH must be a positive integer. Current value: {OLLAMA_CONTEXT_LENGTH}")
-            messagebox.showerror("Config fault!", "OLLAMA_CONTEXT_LENGTH must be a positive integer")
-            error_code += 16
+                                                                                                                                                 # Bool 类型组
+            ('OLLAMA_ENABLE_CUDA', 1 << 10, is_bool_like, "must be 0 or 1. Current value: {}"),
+            ('OLLAMA_VULKAN', 1 << 11, is_bool_like, "must be 0 or 1. Current value: {}"),
+            ('OLLAMA_FLASH_ATTENTION', 1 << 12, is_bool_like, "must be 0 or 1. Current value: {}"),
+            ('OLLAMA_USE_MLOCK', 1 << 13, is_bool_like, "must be 0 or 1. Current value: {}"),
+            ('OLLAMA_MULTIUSER_CACHE', 1 << 14, is_bool_like, "must be 0 or 1. Current value: {}"),
+            ('OLLAMA_INTEL_GPU', 1 << 15, is_bool_like, "must be 0 or 1. Current value: {}"),
+            ('OLLAMA_DEBUG', 1 << 16, is_bool_like, "must be 0 or 1. Current value: {}"),
+        ]
 
-        # Validate OLLAMA_KV_CACHE_TYPE
-        if OLLAMA_KV_CACHE_TYPE not in ["f16", "q8_0", "q4_0"]:
-            self.app_err(f"Config fault! OLLAMA_KV_CACHE_TYPE must be one of 'f16', 'q8_0', 'q4_0'. Current value: {OLLAMA_KV_CACHE_TYPE}")
-            messagebox.showerror("Config fault!", "OLLAMA_KV_CACHE_TYPE must be one of 'f16', 'q8_0', 'q4_0'")
-            error_code += 32
+        # 4. 循环执行校验
+        for key, err_bit, validator, msg_tmpl in check_rules:
+            val = config_values.get(key)
+            # 执行校验函数
+            if not validator(val):
+                error_msg = msg_tmpl.format(val)
+                full_log_msg = f"Config fault! {key} {error_msg}"
+                short_msg = error_msg.split(". Current value")[0] # 弹窗内容稍微处理一下，有些原来的弹窗不带 Current value
+                self.app_err(full_log_msg)
+                messagebox.showerror("Config fault!", f"{key} {short_msg}")
+                error_code += err_bit
 
-        # OLLAMA_KEEP_ALIVE can be "1500" or such as "5m0s"... 不弄了算了
-
-        # Validate OLLAMA_MAX_QUEUE
-        if OLLAMA_MAX_QUEUE <= 0:
-            self.app_err(f"Config fault! OLLAMA_MAX_QUEUE must be a positive integer. Current value: {OLLAMA_MAX_QUEUE}")
-            messagebox.showerror("Config fault!", "OLLAMA_MAX_QUEUE must be a positive integer")
-            error_code += 128
-
-        # Validate OLLAMA_NUM_PARALLEL
-        if int(OLLAMA_NUM_PARALLEL) <= 0:
-            self.app_err(f"Config fault! OLLAMA_NUM_PARALLEL must be a positive integer. Current value: {OLLAMA_NUM_PARALLEL}")
-            messagebox.showerror("Config fault!", "OLLAMA_NUM_PARALLEL must be a positive integer")
-            error_code += 256
-
-        # Validate OLLAMA_MAX_LOADED_MODELS
-        if OLLAMA_MAX_LOADED_MODELS <= 0:
-            self.app_err(f"Config fault! OLLAMA_MAX_LOADED_MODELS must be a positive integer. Current value: {OLLAMA_MAX_LOADED_MODELS}")
-            messagebox.showerror("Config fault!", "OLLAMA_MAX_LOADED_MODELS must be a positive integer")
-            error_code += 512
-
-        # Validate CUDA_VISIBLE_DEVICES
-        if CUDA_VISIBLE_DEVICES and not all(dev.isdigit() for dev in CUDA_VISIBLE_DEVICES.split(",")):
-            self.app_err(f"Config fault! CUDA_VISIBLE_DEVICES must be a comma-separated (',') list of integers. Current value: {CUDA_VISIBLE_DEVICES}")
-            messagebox.showerror("Config fault!", "CUDA_VISIBLE_DEVICES must be a comma-separated (',') list of integers")
-            error_code += 1024
-
-        # bool check: 理论上这里不应该有错误，因为配置是程序自己弄的。但是为了防止用户自己手写json，还是检查一下。
-
-        # Validate OLLAMA_ENABLE_CUDA
-        if OLLAMA_ENABLE_CUDA not in ["0", "1", 0, 1]:
-            self.app_err(f"Config fault! OLLAMA_ENABLE_CUDA must be 0 or 1. Current value: {OLLAMA_ENABLE_CUDA}")
-            messagebox.showerror("Config fault!", "OLLAMA_ENABLE_CUDA must be 0 or 1")
-            error_code += 2048
-
-        # Validate OLLAMA_FLASH_ATTENTION
-        if OLLAMA_FLASH_ATTENTION not in ["0", "1", 0, 1]:
-            self.app_err(f"Config fault! OLLAMA_FLASH_ATTENTION must be 0 or 1. Current value: {OLLAMA_FLASH_ATTENTION}")
-            messagebox.showerror("Config fault!", "OLLAMA_FLASH_ATTENTION must be 0 or 1")
-            error_code += 4096
-
-        # Validate OLLAMA_USE_MLOCK
-        if OLLAMA_USE_MLOCK not in ["0", "1", 0, 1]:
-            self.app_err(f"Config fault! OLLAMA_USE_MLOCK must be 0 or 1. Current value: {OLLAMA_USE_MLOCK}")
-            messagebox.showerror("Config fault!", "OLLAMA_USE_MLOCK must be 0 or 1")
-            error_code += 8192
-
-        # Validate OLLAMA_MULTIUSER_CACHE
-        if OLLAMA_MULTIUSER_CACHE not in ["0", "1", 0, 1]:
-            self.app_err(f"Config fault! OLLAMA_MULTIUSER_CACHE must be 0 or 1. Current value: {OLLAMA_MULTIUSER_CACHE}")
-            messagebox.showerror("Config fault!", "OLLAMA_MULTIUSER_CACHE must be 0 or 1")
-            error_code += 16384
-
-        # Validate OLLAMA_INTEL_GPU
-        if OLLAMA_INTEL_GPU not in ["0", "1", 0, 1]:
-            self.app_err(f"Config fault! OLLAMA_INTEL_GPU must be 0 or 1. Current value: {OLLAMA_INTEL_GPU}")
-            messagebox.showerror("Config fault!", "OLLAMA_INTEL_GPU must be 0 or 1")
-            error_code += 32768
-
-        # Validate OLLAMA_DEBUG
-        if OLLAMA_DEBUG not in ["0", "1", 0, 1]:
-            self.app_err(f"Config fault! OLLAMA_DEBUG must be 0 or 1. Current value: {OLLAMA_DEBUG}")
-            messagebox.showerror("Config fault!", "OLLAMA_DEBUG must be 0 or 1")
-            error_code += 65536
         return error_code
 
 
