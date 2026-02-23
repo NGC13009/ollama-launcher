@@ -18,7 +18,7 @@ Quick Links:
 
 3. Extract both ollama-launcher and ollama to the installation path of your choice. (They are generally placed in different paths. For example, you can extract and install ollama-launcher to `C:/application/ollama/ollama-launcher` and simultaneously extract and install ollama to `C:/application/ollama/OLLAMA_FILE/`.)
 
-4. After that, launch ollama-launcher and configure the path to the ollama executable file. This allows ollama-launcher to correctly locate and start ollama.
+4. Start the ollama-launcher and configure the executable path of ollama. This will allow the ollama-launcher to correctly locate and start ollama. Several errors will pop up on the first startup, which is normal. They should disappear after you configure it properly.
 
 5. Done! You can now start an ollama process, quickly configure it as needed, manage ollama versions, and perform upgrades. You can also normally use other applications to call ollama for LLM conversations via the API. (For example, execute `ollama run qwen3:0.6b` in PowerShell or bash to converse with large models.)
 

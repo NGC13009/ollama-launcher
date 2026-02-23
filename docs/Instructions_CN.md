@@ -12,7 +12,7 @@
 
 3. 分别解压 ollama-launcher 以及 ollama 到您希望安装的程序路径。（两者一般是不同的路径，例如您可以将ollama-launcher解压安装到`C:/application/ollama/ollama-launcher`，并同时将ollama解压安装到`C:/application/ollama/OLLAMA_FILE/`）
 
-4. 之后，启动ollama-launcher并配置ollama的可执行文件路径。使ollama-launcher可以正确找到ollama并启动它。
+4. 之后，启动ollama-launcher并配置ollama的可执行文件路径。使ollama-launcher可以正确找到ollama并启动它。第一次启动会弹出几个报错，这是正常的，等你配置好之后，他们应该就消失了。
 
 5. 完成！可以开始启动一个 ollama 进程，按照需要快速配置，管理ollama的版本并升级等操作了。也可以正常通过api使用其他应用调用ollama进行LLM对话。（例如通过PowerShell或bash执行`ollama run qwen3:0.6b`与大模型对话）
 
