@@ -11,6 +11,7 @@ Quick Links:
 [Full Instructions](docs/Instructions_CN.md)
 
 > ps: 我提供了一个新程序, 不仅能管理ollama, 还有办法能管理llama.cpp, litellm或者任何由终端脚本控制的东西(比如openclaw, 自动化测试, 日常维护脚本等). 可以查看项目页面来了解: [PsLauncher](https://github.com/NGC13009/PsLauncher)
+> 
 > ps: I have provided a new program that can manage not only `ollama`, but also `llama.cpp`, `litellm`, or anything controlled by terminal scripts (such as `openclaw`, automated testing, daily maintenance scripts, etc.). You can check out the project page to learn more: [PsLauncher](https://github.com/NGC13009/PsLauncher)
 
 ## Quick start
