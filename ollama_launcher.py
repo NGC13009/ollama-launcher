@@ -23,7 +23,12 @@ import os
 import threading
 import time
 import queue
-import pystray
+try:
+    import pystray
+    has_pystray = True
+except ImportError:
+    has_pystray = False
+    pystray = None
 from PIL import Image, ImageTk
 import re
 import webbrowser
@@ -42,8 +47,6 @@ import psutil
 from OL_resource import *
 from OL_source_ico import icon_base64_data
 from utils import *
-
-has_pystray = True
 
 # 配置文件的存储路径
 CONFIG_FILE = "ollama_launcher_config.json"
@@ -319,6 +322,13 @@ class OllamaLauncherGUI:
         action_menu.add_command(label="▶ Ollama Run", command=self.start_ollama)
         action_menu.add_command(label="■ Ollama Stop", command=self.stop_ollama)
         menubar.add_cascade(label="Action", menu=action_menu)
+
+        # --- export 菜单 ---
+        export_menu = tk.Menu(menubar, tearoff=0)
+        export_menu.add_command(label="Export as PS1 Script", command=self.export_ps1_script)
+        export_menu.add_command(label="Export as BAT/CMD Script", command=self.export_bat_script)
+        export_menu.add_command(label="Export as Bash Script", command=self.export_bash_script)
+        menubar.add_cascade(label="Export", menu=export_menu)
 
         # --- log 菜单 ---
         log_menu = tk.Menu(menubar, tearoff=0)
@@ -1386,6 +1396,143 @@ class OllamaLauncherGUI:
                 error_code += err_bit
 
         return error_code
+
+    def _generate_script_content(self, script_type):
+        """生成脚本内容的核心方法。script_type: 'ps1', 'bat', 'bash'"""
+        error_code = self.check_settings()
+        if error_code > 0:
+            self.app_err(f'配置检查失败。无法生成脚本。错误代码: {bin(error_code)}')
+            self.app_time()
+            return None
+
+        # 收集所有环境变量
+        env = {}
+        for key, tk_var in self.vars.items():
+            if key != 'ollama_exe_path':
+                value = str(tk_var.get())
+                is_flag = key in ["OLLAMA_ENABLE_CUDA", "OLLAMA_FLASH_ATTENTION", "OLLAMA_USE_MLOCK"]
+                if value or is_flag:
+                    env[key] = value
+        
+        # 添加额外的用户环境变量
+        env.update(self.user_env)
+        
+        ollama_path = self.vars['ollama_exe_path'].get()
+        ollama_dir = os.path.dirname(ollama_path)
+        
+        lines = []
+        
+        if script_type == 'ps1':
+            lines.append("# PowerShell 脚本 - 启动 Ollama 服务")
+            lines.append("# 自动生成自 Ollama Launcher")
+            lines.append("")
+            lines.append("# 设置环境变量")
+            for key, value in env.items():
+                # PowerShell 中使用 $env: 前缀设置环境变量
+                lines.append(f"$env:{key} = \"{value}\"")
+            lines.append("")
+            lines.append("# 切换到 ollama 目录")
+            lines.append(f"Set-Location \"{ollama_dir}\"")
+            lines.append("")
+            lines.append("# 启动 ollama 服务")
+            lines.append(f"Start-Process -FilePath \"{ollama_path}\" -ArgumentList \"serve\" -NoNewWindow -Wait")
+            lines.append("")
+            lines.append("# 脚本结束")
+            
+        elif script_type == 'bat':
+            lines.append("@echo off")
+            lines.append("REM 批处理脚本 - 启动 Ollama 服务")
+            lines.append("REM 自动生成自 Ollama Launcher")
+            lines.append("")
+            lines.append("REM 设置环境变量")
+            for key, value in env.items():
+                lines.append(f"set {key}={value}")
+            lines.append("")
+            lines.append("REM 切换到 ollama 目录")
+            lines.append(f"cd /d \"{ollama_dir}\"")
+            lines.append("")
+            lines.append("REM 启动 ollama 服务")
+            lines.append(f"\"{ollama_path}\" serve")
+            lines.append("")
+            lines.append("REM 脚本结束")
+            lines.append("pause")
+            
+        elif script_type == 'bash':
+            lines.append("#!/bin/bash")
+            lines.append("# Bash 脚本 - 启动 Ollama 服务")
+            lines.append("# 自动生成自 Ollama Launcher")
+            lines.append("")
+            lines.append("# 设置环境变量")
+            for key, value in env.items():
+                lines.append(f"export {key}=\"{value}\"")
+            lines.append("")
+            lines.append("# 切换到 ollama 目录")
+            lines.append(f"cd \"{ollama_dir}\"")
+            lines.append("")
+            lines.append("# 启动 ollama 服务")
+            lines.append(f"\"{ollama_path}\" serve")
+            lines.append("")
+            lines.append("# 脚本结束")
+            
+        return "\n".join(lines)
+
+    def _export_script(self, script_type, file_ext, file_type_desc):
+        """通用的脚本导出方法"""
+        content = self._generate_script_content(script_type)
+        if content is None:
+            return
+        
+        # 生成默认文件名
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        default_filename = f"ollama_launcher_{timestamp}.{file_ext}"
+        
+        # 获取当前工作目录
+        initial_directory = os.getcwd()
+        
+        # 定义文件类型过滤器
+        file_types = [(f'{file_type_desc} files', f'*.{file_ext}'), ('All files', '*.*')]
+        
+        # 调用保存文件对话框
+        file_path = filedialog.asksaveasfilename(
+            title=f"导出为 {file_type_desc} 脚本",
+            initialdir=initial_directory,
+            initialfile=default_filename,
+            defaultextension=f".{file_ext}",
+            filetypes=file_types
+        )
+        
+        # 检查用户是否选择了文件路径
+        if not file_path:
+            self.app_info("用户取消了导出操作")
+            return
+        
+        # 写入文件
+        try:
+            with open(file_path, 'w', encoding='utf-8') as f:
+                f.write(content)
+            self.app_info(f"脚本已保存到: {file_path}")
+            messagebox.showinfo("导出成功", f"脚本已成功导出到:\n{file_path}")
+        except IOError as e:
+            self.app_err(f"保存脚本时发生IO错误: {e}")
+            messagebox.showerror("导出错误", f"保存脚本时发生IO错误: {e}")
+        except Exception as e:
+            self.app_err(f"保存脚本时发生未知错误: {e}")
+            messagebox.showerror("导出错误", f"保存脚本时发生未知错误: {e}")
+
+    def export_ps1_script(self):
+        """导出为 PowerShell 脚本"""
+        self.app_info("导出为 PowerShell 脚本")
+        self._export_script('ps1', 'ps1', 'PowerShell Script')
+
+    def export_bat_script(self):
+        """导出为 BAT/CMD 脚本"""
+        self.app_info("导出为 BAT/CMD 脚本")
+        self._export_script('bat', 'bat', 'Batch Script')
+
+    def export_bash_script(self):
+        """导出为 Bash 脚本"""
+        self.app_info("导出为 Bash 脚本")
+        self._export_script('bash', 'sh', 'Bash Script')
 
 
 if __name__ == "__main__":
