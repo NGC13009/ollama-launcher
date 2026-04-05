@@ -1,6 +1,8 @@
 # ollama-launcher
 更好的ollama启动器，支持更多可设置参数，允许快速启停，以及最小化至系统托盘等.
 
+> ps: 我提供了一个新程序, 不仅能管理ollama, 还有办法能管理llama.cpp, litellm或者任何由终端脚本控制的东西(比如openclaw, 自动化测试, 日常维护脚本等). 可以查看项目页面来了解: [PsLauncher](https://github.com/NGC13009/PsLauncher)
+
 ![title png](./title.png)
 
 快速链接：
